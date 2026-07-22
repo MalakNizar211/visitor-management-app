@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:mobile_application/security_home.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'loginpage.dart';
@@ -25,6 +26,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = Supabase.instance.client.auth.currentSession;
+    final isSessionValid = session;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Visitor Management',
@@ -124,7 +127,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      home: const LoginPage(),
+      home: const SecurityHome(),
     );
   }
 }

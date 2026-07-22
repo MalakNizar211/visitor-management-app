@@ -41,4 +41,17 @@ class VisitorService {
     return Visitor.fromMap(response);
   }
 
+  // Updates an existing visitor's info (name, national ID, phone).
+  // Used from the visit edit modal when HR corrects visitor details.
+  Future<Visitor?> updateVisitor(String id, Map<String, dynamic> updates) async {
+    final response = await supabase
+        .from('visitors')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+    if (response == null) return null;
+    return Visitor.fromMap(response);
+  }
 }

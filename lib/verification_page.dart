@@ -160,24 +160,37 @@ class _VerificationPageState extends State<VerificationPage> {
     );
   }
 
-  String _relativeTimeMessage(DateTime scheduledDateTime) {
-    final now = DateTime.now();
-    final diff = scheduledDateTime.difference(now);
+  String _formatTime(DateTime d) {
+    final hour24 = d.hour;
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    final minute = d.minute.toString().padLeft(2, '0');
+    return '$hour12:$minute $period';
+  }
 
-    if (diff.isNegative) {
-      final passed = now.difference(scheduledDateTime);
-      if (passed.inMinutes < 60) {
-        return 'Scheduled time was ${passed.inMinutes} minutes ago';
-      } else {
-        return 'Scheduled time was ${passed.inHours} hours ago';
-      }
-    } else {
-      if (diff.inMinutes < 60) {
-        return 'Scheduled to start in ${diff.inMinutes} minutes';
-      } else {
-        return 'Scheduled to start in ${diff.inHours} hours';
-      }
+  String _scheduleStatusMessage(VisitSchedule schedule) {
+    final now = DateTime.now();
+    final start = schedule.scheduledStart;
+    final end = schedule.scheduledEnd;
+    final range = '${_formatTime(start)} – ${_formatTime(end)}';
+
+    if (now.isBefore(start)) {
+      final diff = start.difference(now);
+      final untilStart = diff.inMinutes < 60
+          ? 'Starts in ${diff.inMinutes} minutes'
+          : 'Starts in ${diff.inHours} hours';
+      return '$range · $untilStart';
     }
+
+    if (now.isAfter(end)) {
+      final diff = now.difference(end);
+      final sinceEnd = diff.inMinutes < 60
+          ? 'Scheduled window ended ${diff.inMinutes} minutes ago'
+          : 'Scheduled window ended ${diff.inHours} hours ago';
+      return '$range · $sinceEnd';
+    }
+
+    return '$range · Within scheduled window';
   }
 
   // Shared visitor/host/visit details block, reused across the entry/exit
@@ -332,7 +345,7 @@ class _VerificationPageState extends State<VerificationPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _relativeTimeMessage(schedule.scheduledDateTime),
+                    _scheduleStatusMessage(schedule),
                     style: TextStyle(color: Colors.blue[900], fontWeight: FontWeight.w600),
                   ),
                 ),

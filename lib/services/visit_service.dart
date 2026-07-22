@@ -45,6 +45,35 @@ class VisitService {
     return Visit.fromMap(response);
   }
 
+  // Updates editable fields on a visit (purpose, floor, room, host_id, etc.)
+  // Pass only the fields that changed, e.g. {'purpose': 'Meeting', 'floor': '3'}
+  Future<Visit?> updateVisit(String id, Map<String, dynamic> updates) async {
+    final response = await supabase
+        .from('visits')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+    if (response == null) return null;
+    return Visit.fromMap(response);
+  }
+
+  // Updates a single schedule row (date, start_time, end_time) by its own id.
+  // Use this when HR edits an existing scheduled date from the edit modal.
+  Future<VisitSchedule?> updateSchedule(
+      String scheduleId, Map<String, dynamic> updates) async {
+    final response = await supabase
+        .from('visit_schedules')
+        .update(updates)
+        .eq('id', scheduleId)
+        .select()
+        .maybeSingle();
+
+    if (response == null) return null;
+    return VisitSchedule.fromMap(response);
+  }
+
   // Fetch all scheduled dates for a given visit
   Future<List<VisitSchedule>> getSchedulesForVisit(String visitId) async {
     final response = await supabase
@@ -221,7 +250,7 @@ class VisitService {
 
     final response = await supabase
         .from('visits')
-        .select('*, visitors(*), employees(*)')
+        .select('*, visitors(*), employees(*), visit_schedules(*)')
         .eq('created_by', userId)
         .order('created_at', ascending: false);
 

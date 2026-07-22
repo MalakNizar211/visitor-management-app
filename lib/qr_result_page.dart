@@ -7,15 +7,37 @@ import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'models/visit_schedule_model.dart';
 
 class QrResultPage extends StatefulWidget {
   final String visitId;
   final String visitorName;
 
+  // Optional extra details used to build the formal share message.
+  // Pass whatever you have available - anything left null is simply
+  // skipped in the message instead of showing as "null" or a blank line.
+  // schedules carries full start/end time ranges per day, not just a
+  // single timestamp - this is what lets the message show real ranges
+  // like "2:00 PM - 4:00 PM" instead of only a start time.
+  final String? hostName;
+  final String? department;
+  final String? purpose;
+  final String? floor;
+  final String? room;
+  final List<VisitSchedule>? schedules;
+  final String? companyName;
+
   const QrResultPage({
     super.key,
     required this.visitId,
     required this.visitorName,
+    this.hostName,
+    this.department,
+    this.purpose,
+    this.floor,
+    this.room,
+    this.schedules,
+    this.companyName,
   });
 
   @override
@@ -28,6 +50,93 @@ class _QrResultPageState extends State<QrResultPage> {
   bool isSharing = false;
 
   static const Color primaryBlue = Color(0xFF003B71);
+
+  static const List<String> _weekdayNames = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  String _formatDate(DateTime d) {
+    final weekday = _weekdayNames[d.weekday - 1];
+    final month = _monthNames[d.month - 1];
+    return '$weekday, ${d.day} $month ${d.year}';
+  }
+
+  String _formatTime(DateTime d) {
+    final hour24 = d.hour;
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    final minute = d.minute.toString().padLeft(2, '0');
+    return '$hour12:$minute $period';
+  }
+
+  // Builds the full formal, welcoming message sent alongside the QR image.
+  String _buildShareMessage() {
+    final buffer = StringBuffer();
+
+    buffer.writeln('Dear ${widget.visitorName},');
+    buffer.writeln();
+    buffer.writeln(
+      'You are cordially invited to visit ${widget.companyName ?? 'our office'}. '
+          'We are pleased to confirm the details of your visit below.',
+    );
+    buffer.writeln();
+
+    if (widget.schedules != null && widget.schedules!.isNotEmpty) {
+      final sorted = [...widget.schedules!]
+        ..sort((a, b) => a.scheduledStart.compareTo(b.scheduledStart));
+
+      if (sorted.length == 1) {
+        final s = sorted.first;
+        buffer.writeln('Date: ${_formatDate(s.scheduledStart)}');
+        buffer.writeln('Time: ${_formatTime(s.scheduledStart)} – ${_formatTime(s.scheduledEnd)}');
+      } else {
+        buffer.writeln('Scheduled visits:');
+        const maxLines = 6;
+        final linesToShow = sorted.length > maxLines ? maxLines : sorted.length;
+
+        for (var i = 0; i < linesToShow; i++) {
+          final s = sorted[i];
+          buffer.writeln(
+            '  • ${_formatDate(s.scheduledStart)}, ${_formatTime(s.scheduledStart)} – ${_formatTime(s.scheduledEnd)}',
+          );
+        }
+
+        if (sorted.length > maxLines) {
+          final remaining = sorted.length - maxLines;
+          buffer.writeln('  ...and $remaining more scheduled visit${remaining == 1 ? '' : 's'}.');
+        }
+      }
+    }
+
+    if (widget.hostName != null) {
+      final dept = widget.department != null ? ' (${widget.department})' : '';
+      buffer.writeln('Host: ${widget.hostName}$dept');
+    }
+
+    if (widget.purpose != null) {
+      buffer.writeln('Purpose of visit: ${widget.purpose}');
+    }
+
+    if (widget.floor != null || widget.room != null) {
+      buffer.writeln(
+        'Location: Floor ${widget.floor ?? '-'}, Room ${widget.room ?? '-'}',
+      );
+    }
+
+    buffer.writeln();
+    buffer.writeln(
+      'Please present the attached QR code at the security gate upon your arrival. '
+          'This code is unique to your visit and will be used to check you in and out.',
+    );
+    buffer.writeln();
+    buffer.writeln('We look forward to welcoming you.');
+
+    return buffer.toString();
+  }
 
   Future<void> _shareQr() async {
     setState(() => isSharing = true);
@@ -51,8 +160,7 @@ class _QrResultPageState extends State<QrResultPage> {
 
       await Share.shareXFiles(
         [XFile(file.path)],
-        text:
-        'Visitor pass for ${widget.visitorName}. Please present this QR code at the gate.',
+        text: _buildShareMessage(),
       );
     } catch (e) {
       if (!mounted) return;
