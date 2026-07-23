@@ -74,6 +74,31 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
+  // Creates an additional schedule row while HR edits a visit.
+  Future<VisitSchedule> createSchedule(
+      String visitId,
+      Map<String, dynamic> scheduleData,
+      ) async {
+    final data = Map<String, dynamic>.from(scheduleData);
+    data['visit_id'] = visitId;
+
+    final response = await supabase
+        .from('visit_schedules')
+        .insert(data)
+        .select()
+        .single();
+
+    return VisitSchedule.fromMap(response);
+  }
+
+  // Removes a schedule row when HR deletes it from the edit screen.
+  Future<void> deleteSchedule(String scheduleId) async {
+    await supabase
+        .from('visit_schedules')
+        .delete()
+        .eq('id', scheduleId);
+  }
+
   // Fetch all scheduled dates for a given visit
   Future<List<VisitSchedule>> getSchedulesForVisit(String visitId) async {
     final response = await supabase

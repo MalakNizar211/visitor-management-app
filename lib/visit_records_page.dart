@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
+
+import 'app_theme.dart';
 import 'services/visit_service.dart';
 
-enum _DateFilter { today, yesterday, custom }
+enum _DateFilter {
+  today,
+  yesterday,
+  custom,
+}
 
 class VisitRecordsPage extends StatefulWidget {
   const VisitRecordsPage({super.key});
 
   @override
-  State<VisitRecordsPage> createState() => _VisitRecordsPageState();
+  State<VisitRecordsPage> createState() {
+    return _VisitRecordsPageState();
+  }
 }
 
 class _VisitRecordsPageState extends State<VisitRecordsPage> {
   final VisitService visitService = VisitService();
 
   _DateFilter selectedFilter = _DateFilter.today;
+
   DateTime selectedDate = DateTime.now();
+
   String searchQuery = '';
 
   late Future<List<Map<String, dynamic>>> recordsFuture;
@@ -22,6 +32,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
   @override
   void initState() {
     super.initState();
+
     recordsFuture = visitService.getVisitRecordsForDate(selectedDate);
   }
 
@@ -36,14 +47,18 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
       selectedFilter = _DateFilter.today;
       selectedDate = DateTime.now();
     });
+
     _refresh();
   }
 
   void _selectYesterday() {
     setState(() {
       selectedFilter = _DateFilter.yesterday;
-      selectedDate = DateTime.now().subtract(const Duration(days: 1));
+      selectedDate = DateTime.now().subtract(
+        const Duration(days: 1),
+      );
     });
+
     _refresh();
   }
 
@@ -53,14 +68,29 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
       initialDate: selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: AppColors.ratpGreen,
+              secondary: AppColors.ratpGreenDark,
+              surface: AppColors.surface,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
-    if (picked == null) return;
+    if (picked == null) {
+      return;
+    }
 
     setState(() {
       selectedFilter = _DateFilter.custom;
       selectedDate = picked;
     });
+
     _refresh();
   }
 
@@ -71,75 +101,705 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
       case _DateFilter.yesterday:
         return 'Yesterday';
       case _DateFilter.custom:
-        return '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+        return '${selectedDate.year}-'
+            '${selectedDate.month.toString().padLeft(2, '0')}-'
+            '${selectedDate.day.toString().padLeft(2, '0')}';
     }
   }
 
   String _formatTime(String? isoString) {
-    if (isoString == null) return '—';
+    if (isoString == null) {
+      return '—';
+    }
+
     final dt = DateTime.parse(isoString).toLocal();
+
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
+
     return '$hour:$minute';
   }
 
-  List<Map<String, dynamic>> _applySearch(List<Map<String, dynamic>> records) {
-    if (searchQuery.trim().isEmpty) return records;
+  String _displayValue(dynamic value) {
+    final text = value?.toString().trim();
+
+    if (text == null || text.isEmpty) {
+      return '-';
+    }
+
+    return text;
+  }
+
+  List<Map<String, dynamic>> _applySearch(
+      List<Map<String, dynamic>> records,
+      ) {
+    if (searchQuery.trim().isEmpty) {
+      return records;
+    }
 
     final query = searchQuery.trim().toLowerCase();
-    return records.where((r) {
-      final name = (r['full_name'] ?? '').toString().toLowerCase();
-      final nationalId = (r['national_id'] ?? '').toString().toLowerCase();
-      return name.contains(query) || nationalId.contains(query);
-    }).toList();
+
+    return records.where(
+          (record) {
+        final name = (record['full_name'] ?? '').toString().toLowerCase();
+
+        final nationalId =
+        (record['national_id'] ?? '').toString().toLowerCase();
+
+        return name.contains(query) || nationalId.contains(query);
+      },
+    ).toList();
   }
 
   void _showRecordDetails(Map<String, dynamic> record) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(28),
+        ),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                record['full_name'] ?? 'Unknown',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.66,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                12,
+                20,
+                28,
               ),
-              const SizedBox(height: 16),
-              Text('National ID: ${record['national_id'] ?? '-'}'),
-              const SizedBox(height: 8),
-              Text('Phone: ${record['phone'] ?? '-'}'),
-              const SizedBox(height: 8),
-              Text('Visiting: ${record['host_name'] ?? '-'}'),
-              const SizedBox(height: 8),
-              Text('Purpose: ${record['purpose'] ?? '-'}'),
-              const SizedBox(height: 8),
-              Text('Checked in: ${_formatTime(record['check_in_time'])}'),
-              const SizedBox(height: 8),
-              Text('Checked out: ${_formatTime(record['check_out_time'])}'),
-              const SizedBox(height: 16),
-            ],
-          ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      margin: const EdgeInsets.only(bottom: 18),
+                      decoration: BoxDecoration(
+                        color: AppColors.line,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: AppGradients.header,
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Colors.white.withOpacity(.18),
+                          child: Text(
+                            initialsFromName(
+                              _displayValue(record['full_name']),
+                            ),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _displayValue(record['full_name']),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -.3,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                'Visit record · ${_dateLabel()}',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(.82),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(.16),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(.2),
+                            ),
+                          ),
+                          child: const Text(
+                            'Record',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const _DetailsSectionTitle(
+                    icon: Icons.person_outline_rounded,
+                    text: 'Visitor information',
+                  ),
+                  _detailRow(
+                    'National ID',
+                    record['national_id'],
+                  ),
+                  _detailRow(
+                    'Phone',
+                    record['phone'],
+                  ),
+                  const SizedBox(height: 18),
+                  const _DetailsSectionTitle(
+                    icon: Icons.business_center_outlined,
+                    text: 'Visit information',
+                  ),
+                  _detailRow(
+                    'Visiting',
+                    record['host_name'],
+                  ),
+                  _detailRow(
+                    'Purpose',
+                    record['purpose'],
+                  ),
+                  const SizedBox(height: 18),
+                  const _DetailsSectionTitle(
+                    icon: Icons.schedule_rounded,
+                    text: 'Check-in / Check-out',
+                  ),
+                  _timeRow(
+                    icon: Icons.login_rounded,
+                    label: 'Checked in',
+                    value: _formatTime(record['check_in_time']),
+                    color: AppColors.success,
+                  ),
+                  _timeRow(
+                    icon: Icons.logout_rounded,
+                    label: 'Checked out',
+                    value: _formatTime(record['check_out_time']),
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Close details'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _filterChip(String label, bool selected, VoidCallback onTap) {
+  Widget _detailRow(String label, dynamic value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 13,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.line,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 116,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              _displayValue(value),
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timeRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.line,
+        ),
+      ),
+      child: Row(
+        children: [
+          AppIconBadge(
+            icon: icon,
+            color: color,
+            size: 42,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(
+      String label,
+      bool selected,
+      VoidCallback onTap,
+      IconData icon,
+      ) {
     return ChoiceChip(
+      avatar: Icon(
+        icon,
+        color: selected ? Colors.white : AppColors.ratpGreenDark,
+        size: 18,
+      ),
       label: Text(label),
       selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: Colors.lightBlue,
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : Colors.black87,
-        fontWeight: FontWeight.w600,
+      onSelected: (_) {
+        onTap();
+      },
+    );
+  }
+
+  Widget _recordCard(Map<String, dynamic> record) {
+    final visitorName = _displayValue(record['full_name']);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppColors.line,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(.035),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () {
+          _showRecordDetails(record);
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: AppColors.softGreen,
+                child: Text(
+                  initialsFromName(visitorName),
+                  style: const TextStyle(
+                    color: AppColors.ratpGreenDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      visitorName,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.1,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.credit_card_rounded,
+                          size: 16,
+                          color: AppColors.ratpGreenDark,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'National ID: ${_displayValue(record['national_id'])}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.business_center_outlined,
+                          size: 16,
+                          color: AppColors.ratpGreenDark,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'Visiting ${_displayValue(record['host_name'])}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        _timePill(
+                          icon: Icons.login_rounded,
+                          label: _formatTime(record['check_in_time']),
+                          color: AppColors.success,
+                        ),
+                        _timePill(
+                          icon: Icons.logout_rounded,
+                          label: _formatTime(record['check_out_time']),
+                          color: AppColors.warning,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timePill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.11),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: color.withOpacity(.18),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      children: [
+        const SizedBox(height: 70),
+        const Center(
+          child: AppIconBadge(
+            icon: Icons.history_toggle_off_rounded,
+            size: 70,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: Text(
+            'No records for ${_dateLabel()}.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(height: 7),
+        const Center(
+          child: Text(
+            'Try another date or search with a different visitor name.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _errorState(Object error) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      children: [
+        const SizedBox(height: 70),
+        const Center(
+          child: AppIconBadge(
+            icon: Icons.error_outline_rounded,
+            color: AppColors.danger,
+            size: 70,
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Center(
+          child: Text(
+            'Something went wrong',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.navy,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(height: 7),
+        Center(
+          child: Text(
+            error.toString(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _filtersHeader() {
+    return Container(
+      color: AppColors.background,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Column(
+        children: [
+          PageHeader(
+            title: 'Visit Records',
+            subtitle:
+            'Review check-in and check-out history for ${_dateLabel().toLowerCase()}.',
+            icon: Icons.manage_history_rounded,
+          ),
+          const SizedBox(height: 16),
+          SectionCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    AppIconBadge(
+                      icon: Icons.filter_alt_outlined,
+                      size: 38,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Filter records',
+                      style: TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _filterChip(
+                      'Today',
+                      selectedFilter == _DateFilter.today,
+                      _selectToday,
+                      Icons.today_rounded,
+                    ),
+                    _filterChip(
+                      'Yesterday',
+                      selectedFilter == _DateFilter.yesterday,
+                      _selectYesterday,
+                      Icons.history_rounded,
+                    ),
+                    _filterChip(
+                      selectedFilter == _DateFilter.custom
+                          ? _dateLabel()
+                          : 'Pick date',
+                      selectedFilter == _DateFilter.custom,
+                      _pickCustomDate,
+                      Icons.calendar_month_rounded,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search by name or national ID',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      searchQuery = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _recordsBody() {
+    return Expanded(
+      child: RefreshIndicator(
+        color: AppColors.ratpGreen,
+        onRefresh: () async {
+          _refresh();
+        },
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: recordsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.ratpGreen,
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return _errorState(snapshot.error!);
+            }
+
+            final records = _applySearch(snapshot.data ?? []);
+
+            if (records.isEmpty) {
+              return _emptyState();
+            }
+
+            return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: records.length,
+              itemBuilder: (context, index) {
+                return _recordCard(records[index]);
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -147,120 +807,48 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.lightBlue,
         title: const Text('Visit Records'),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _filterChip('Today', selectedFilter == _DateFilter.today, _selectToday),
-                    const SizedBox(width: 8),
-                    _filterChip('Yesterday', selectedFilter == _DateFilter.yesterday, _selectYesterday),
-                    const SizedBox(width: 8),
-                    _filterChip(
-                      selectedFilter == _DateFilter.custom ? _dateLabel() : 'Pick date',
-                      selectedFilter == _DateFilter.custom,
-                      _pickCustomDate,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search by name or national ID',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    isDense: true,
-                  ),
-                  onChanged: (value) => setState(() => searchQuery = value),
-                ),
-              ],
-            ),
+          _filtersHeader(),
+          _recordsBody(),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailsSectionTitle extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _DetailsSectionTitle({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: 12,
+      ),
+      child: Row(
+        children: [
+          AppIconBadge(
+            icon: icon,
+            size: 34,
           ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async => _refresh(),
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: recordsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-
-                  final records = _applySearch(snapshot.data ?? []);
-
-                  if (records.isEmpty) {
-                    return ListView(
-                      children: [
-                        const SizedBox(height: 80),
-                        Center(
-                          child: Text(
-                            'No records for ${_dateLabel()}.',
-                            style: const TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: records.length,
-                    itemBuilder: (context, index) {
-                      final record = records[index];
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          onTap: () => _showRecordDetails(record),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  record['full_name'] ?? 'Unknown',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text('National ID: ${record['national_id'] ?? '-'}'),
-                                Text('Visiting: ${record['host_name'] ?? '-'}'),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Icon(Icons.login, size: 16, color: Colors.green[700]),
-                                    const SizedBox(width: 4),
-                                    Text(_formatTime(record['check_in_time'])),
-                                    const SizedBox(width: 16),
-                                    Icon(Icons.logout, size: 16, color: Colors.orange[700]),
-                                    const SizedBox(width: 4),
-                                    Text(_formatTime(record['check_out_time'])),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+          const SizedBox(width: 10),
+          Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],

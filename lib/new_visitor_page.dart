@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'models/visitor_model.dart';
+
+import 'app_theme.dart';
+import 'models/employee_model.dart';
 import 'models/visit_model.dart';
 import 'models/visit_schedule_model.dart';
-import 'models/employee_model.dart';
-import 'services/visitor_service.dart';
-import 'services/visit_service.dart';
-import 'services/employee_service.dart';
+import 'models/visitor_model.dart';
 import 'qr_result_page.dart';
+import 'services/employee_service.dart';
+import 'services/visit_service.dart';
+import 'services/visitor_service.dart';
 
-// A period: a set of individually-picked calendar days, sharing one time range.
-// (Also covers what used to be a "one-time" visit: just pick a single day.)
 class _PeriodBlock {
   final Set<DateTime> days;
   final TimeOfDay startTime;
@@ -23,11 +23,6 @@ class _PeriodBlock {
   });
 }
 
-/// A text field that shows its matching results as a floating dropdown
-/// overlay (like a browser address bar autocomplete) instead of a
-/// permanently-visible list underneath. The overlay only appears while
-/// the field has focus, and closes automatically on selection or when
-/// focus moves away.
 class _SearchDropdownField<T> extends StatefulWidget {
   final TextEditingController controller;
   final String labelText;
@@ -35,6 +30,7 @@ class _SearchDropdownField<T> extends StatefulWidget {
   final String Function(T item) itemLabelBuilder;
   final String Function(T item)? itemSubtitleBuilder;
   final ValueChanged<T> onSelected;
+  final IconData icon;
 
   const _SearchDropdownField({
     super.key,
@@ -44,20 +40,25 @@ class _SearchDropdownField<T> extends StatefulWidget {
     required this.itemLabelBuilder,
     this.itemSubtitleBuilder,
     required this.onSelected,
+    this.icon = Icons.search_rounded,
   });
 
   @override
-  State<_SearchDropdownField<T>> createState() => _SearchDropdownFieldState<T>();
+  State<_SearchDropdownField<T>> createState() {
+    return _SearchDropdownFieldState<T>();
+  }
 }
 
 class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
-  final _focusNode = FocusNode();
-  final _layerLink = LayerLink();
+  final FocusNode _focusNode = FocusNode();
+  final LayerLink _layerLink = LayerLink();
+
   OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
     super.initState();
+
     _focusNode.addListener(_onFocusChange);
     widget.controller.addListener(_onTextChange);
   }
@@ -66,7 +67,7 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
     if (_focusNode.hasFocus) {
       _showOverlay();
     } else {
-      _removeOverlay();
+      Future.delayed(const Duration(milliseconds: 160), _removeOverlay);
     }
   }
 
@@ -76,7 +77,9 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
 
   void _showOverlay() {
     _removeOverlay();
+
     _overlayEntry = _createOverlayEntry();
+
     Overlay.of(context).insert(_overlayEntry!);
   }
 
@@ -90,65 +93,127 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
     final size = renderBox.size;
 
     return OverlayEntry(
-      builder: (context) => Positioned(
-        width: size.width,
-        child: CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: Offset(0, size.height + 4),
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 240),
-              child: _buildList(),
+      builder: (context) {
+        return Positioned(
+          width: size.width,
+          child: CompositedTransformFollower(
+            link: _layerLink,
+            showWhenUnlinked: false,
+            offset: Offset(0, size.height + 8),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 250),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                  border: Border.all(color: AppColors.line),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(.08),
+                      blurRadius: 24,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                  child: _buildList(),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildList() {
     final items = widget.itemsBuilder();
+
     if (items.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('No matches found'),
+        padding: EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              color: AppColors.muted,
+            ),
+            SizedBox(width: 10),
+            Text(
+              'No matches found',
+              style: TextStyle(
+                color: AppColors.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       );
     }
+
     return ListView.separated(
       shrinkWrap: true,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, __) {
+        return const Divider(
+          height: 1,
+          color: AppColors.line,
+        );
+      },
       itemBuilder: (context, index) {
         final item = items[index];
+
         return InkWell(
-          // canRequestFocus: false keeps the search field focused (and the
-          // overlay open) long enough for the tap to register as a
-          // selection, instead of the overlay closing itself first.
           canRequestFocus: false,
           onTap: () {
             widget.onSelected(item);
             _focusNode.unfocus();
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            child: Row(
               children: [
-                Text(
-                  widget.itemLabelBuilder(item),
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                const AppIconBadge(
+                  icon: Icons.person_outline_rounded,
+                  size: 38,
                 ),
-                if (widget.itemSubtitleBuilder != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.itemSubtitleBuilder!(item),
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.itemLabelBuilder(item),
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (widget.itemSubtitleBuilder != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.itemSubtitleBuilder!(item),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.muted,
+                ),
               ],
             ),
           ),
@@ -160,9 +225,12 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
   @override
   void dispose() {
     _removeOverlay();
+
     _focusNode.removeListener(_onFocusChange);
     widget.controller.removeListener(_onTextChange);
+
     _focusNode.dispose();
+
     super.dispose();
   }
 
@@ -175,8 +243,7 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
         focusNode: _focusNode,
         decoration: InputDecoration(
           labelText: widget.labelText,
-          prefixIcon: const Icon(Icons.search),
-          border: const OutlineInputBorder(),
+          prefixIcon: Icon(widget.icon),
         ),
       ),
     );
@@ -184,204 +251,607 @@ class _SearchDropdownFieldState<T> extends State<_SearchDropdownField<T>> {
 }
 
 class NewVisitorPage extends StatefulWidget {
-  const NewVisitorPage({super.key});
+  final Map<String, dynamic>? visitToEdit;
+
+  const NewVisitorPage({
+    super.key,
+    this.visitToEdit,
+  });
+
+  bool get isEditMode {
+    return visitToEdit != null;
+  }
 
   @override
-  State<NewVisitorPage> createState() => _NewVisitorPageState();
+  State<NewVisitorPage> createState() {
+    return _NewVisitorPageState();
+  }
 }
 
 class _NewVisitorPageState extends State<NewVisitorPage> {
-  final _formKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final VisitorService visitorService = VisitorService();
   final VisitService visitService = VisitService();
   final EmployeeService employeeService = EmployeeService();
 
-  // Visitor selection state
   List<Visitor> existingVisitors = [];
   Visitor? selectedVisitor;
-  bool isRegisteringNewVisitor = false;
-  final visitorSearchController = TextEditingController();
-  bool isLoadingData = true;
 
-  // Employee (host) selection state
+  bool isRegisteringNewVisitor = false;
+
+  final TextEditingController visitorSearchController =
+  TextEditingController();
+
   List<Employee> employees = [];
   Employee? selectedHost;
-  String? selectedDepartmentFilter; // null = All
-  final hostSearchController = TextEditingController();
 
-  // New visitor fields (only used if selectedVisitor stays null)
-  final newNameController = TextEditingController();
-  final newNationalIdController = TextEditingController();
-  final newPhoneController = TextEditingController();
+  String? selectedDepartmentFilter;
 
-  // Visit details
-  final purposeController = TextEditingController();
-  final floorController = TextEditingController();
-  final roomController = TextEditingController();
+  final TextEditingController hostSearchController = TextEditingController();
 
-  // Scheduling state
+  final TextEditingController newNameController = TextEditingController();
+  final TextEditingController newNationalIdController =
+  TextEditingController();
+  final TextEditingController newPhoneController = TextEditingController();
+
+  final TextEditingController purposeController = TextEditingController();
+  final TextEditingController floorController = TextEditingController();
+  final TextEditingController roomController = TextEditingController();
+  final TextEditingController invalidReasonController =
+  TextEditingController();
+
+  String selectedStatus = 'active';
+
   List<_PeriodBlock> periodBlocks = [];
 
+  bool isLoadingData = true;
   bool isSaving = false;
+
+  bool get isEditMode {
+    return widget.isEditMode;
+  }
 
   @override
   void initState() {
     super.initState();
+
+    if (isEditMode) {
+      _prefillEditControllers();
+    }
+
     _loadData();
   }
 
+  void _prefillEditControllers() {
+    final visit = widget.visitToEdit!;
+
+    final visitorInfo = visit['visitors'] as Map<String, dynamic>?;
+
+    newNameController.text = visitorInfo?['full_name']?.toString() ?? '';
+
+    newNationalIdController.text =
+        visitorInfo?['national_id']?.toString() ?? '';
+
+    newPhoneController.text = visitorInfo?['phone']?.toString() ?? '';
+
+    purposeController.text = visit['purpose']?.toString() ?? '';
+    floorController.text = visit['floor']?.toString() ?? '';
+    roomController.text = visit['room']?.toString() ?? '';
+
+    selectedStatus = visit['status']?.toString() ?? 'active';
+
+    invalidReasonController.text =
+        visit['invalid_reason']?.toString() ?? '';
+  }
+
   Future<void> _loadData() async {
-    final visitors = await visitorService.getAllVisitors();
-    final employeesList = await employeeService.getAllEmployees();
-    setState(() {
-      existingVisitors = visitors;
-      employees = employeesList;
-      isLoadingData = false;
-    });
+    try {
+      final visitors = await visitorService.getAllVisitors();
+      final employeesList = await employeeService.getAllEmployees();
+
+      Employee? host;
+
+      List<_PeriodBlock> loadedPeriods = [];
+
+      if (isEditMode) {
+        final visit = widget.visitToEdit!;
+
+        final employeeInfo = visit['employees'] as Map<String, dynamic>?;
+
+        final hostId =
+            visit['host_id']?.toString() ?? employeeInfo?['id']?.toString();
+
+        for (final employee in employeesList) {
+          if (employee.id?.toString() == hostId) {
+            host = employee;
+            break;
+          }
+        }
+
+        final scheduleMaps = (visit['visit_schedules'] as List?) ?? [];
+
+        loadedPeriods = _periodBlocksFromScheduleMaps(scheduleMaps);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        existingVisitors = visitors;
+        employees = employeesList;
+        selectedHost = host;
+        periodBlocks = loadedPeriods;
+        isLoadingData = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoadingData = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load page data: $error'),
+        ),
+      );
+    }
   }
 
-  // --- Visitor search ---
+  List<_PeriodBlock> _periodBlocksFromScheduleMaps(List<dynamic> schedules) {
+    final groupedDays = <String, Set<DateTime>>{};
 
-  List<Visitor> get _filteredVisitors {
+    for (final item in schedules) {
+      final schedule = item as Map<String, dynamic>;
+
+      final dateValue = schedule['scheduled_date']?.toString();
+
+      final startValue = schedule['start_time']?.toString() ?? '00:00:00';
+      final endValue = schedule['end_time']?.toString() ?? '00:00:00';
+
+      if (dateValue == null) {
+        continue;
+      }
+
+      final date = DateTime.tryParse(dateValue);
+
+      if (date == null) {
+        continue;
+      }
+
+      final key = '$startValue|$endValue';
+
+      groupedDays
+          .putIfAbsent(
+        key,
+            () => <DateTime>{},
+      )
+          .add(
+        DateTime(
+          date.year,
+          date.month,
+          date.day,
+        ),
+      );
+    }
+
+    final blocks = groupedDays.entries.map(
+          (entry) {
+        final parts = entry.key.split('|');
+
+        return _PeriodBlock(
+          days: entry.value,
+          startTime: _databaseTimeToTimeOfDay(parts[0]),
+          endTime: _databaseTimeToTimeOfDay(parts[1]),
+        );
+      },
+    ).toList();
+
+    blocks.sort(
+          (first, second) {
+        final firstDays = first.days.toList()..sort();
+        final secondDays = second.days.toList()..sort();
+
+        return firstDays.first.compareTo(secondDays.first);
+      },
+    );
+
+    return blocks;
+  }
+
+  TimeOfDay _databaseTimeToTimeOfDay(String value) {
+    final parts = value.split(':');
+
+    return TimeOfDay(
+      hour: parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0,
+      minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+    );
+  }
+
+  List<Visitor> get filteredVisitors {
     final query = visitorSearchController.text.trim().toLowerCase();
-    if (query.isEmpty) return existingVisitors;
-    return existingVisitors.where((v) {
-      return v.fullName.toLowerCase().contains(query) ||
-          v.nationalId.toLowerCase().contains(query);
-    }).toList();
+
+    if (query.isEmpty) {
+      return existingVisitors;
+    }
+
+    return existingVisitors.where(
+          (visitor) {
+        return visitor.fullName.toLowerCase().contains(query) ||
+            visitor.nationalId.toLowerCase().contains(query);
+      },
+    ).toList();
   }
 
-  // --- Host search + department filter ---
+  List<String> get departments {
+    final departmentList = employees
+        .map(
+          (employee) => employee.department,
+    )
+        .toSet()
+        .toList();
 
-  List<String> get _departments {
-    final set = employees.map((e) => e.department).toSet().toList();
-    set.sort();
-    return set;
+    departmentList.sort();
+
+    return departmentList;
   }
 
-  List<Employee> get _filteredEmployees {
+  List<Employee> get filteredEmployees {
     final query = hostSearchController.text.trim().toLowerCase();
-    return employees.where((e) {
-      final matchesDept =
-          selectedDepartmentFilter == null || e.department == selectedDepartmentFilter;
-      final matchesQuery = query.isEmpty || e.fullName.toLowerCase().contains(query);
-      return matchesDept && matchesQuery;
-    }).toList();
-  }
 
-  // --- Period / visit-day scheduling ---
+    return employees.where(
+          (employee) {
+        final matchesDepartment = selectedDepartmentFilter == null ||
+            employee.department == selectedDepartmentFilter;
+
+        final matchesSearch =
+            query.isEmpty || employee.fullName.toLowerCase().contains(query);
+
+        return matchesDepartment && matchesSearch;
+      },
+    ).toList();
+  }
 
   Future<void> _addPeriod() async {
     final selectedDays = await Navigator.push<Set<DateTime>>(
       context,
-      MaterialPageRoute(builder: (context) => const _PeriodCalendarPicker()),
+      MaterialPageRoute(
+        builder: (context) {
+          return const _PeriodCalendarPicker();
+        },
+      ),
     );
-    if (selectedDays == null || selectedDays.isEmpty || !mounted) return;
 
-    final start = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (start == null || !mounted) return;
-
-    final end = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-    if (end == null) return;
-
-    setState(() {
-      periodBlocks.add(_PeriodBlock(days: selectedDays, startTime: start, endTime: end));
-    });
-  }
-
-  void _removePeriod(int index) {
-    setState(() => periodBlocks.removeAt(index));
-  }
-
-  String _timeOfDayToDbString(TimeOfDay t) {
-    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
-  }
-
-  String _formatDateOnly(DateTime d) {
-    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
-
-  // --- Submit ---
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (!isRegisteringNewVisitor && selectedVisitor == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an existing visitor or switch to "New visitor"')),
-      );
+    if (selectedDays == null || selectedDays.isEmpty || !mounted) {
       return;
     }
 
-    if (isRegisteringNewVisitor &&
+    final startTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      builder: _timePickerThemeBuilder,
+    );
+
+    if (startTime == null || !mounted) {
+      return;
+    }
+
+    final endTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      builder: _timePickerThemeBuilder,
+    );
+
+    if (endTime == null) {
+      return;
+    }
+
+    setState(() {
+      periodBlocks.add(
+        _PeriodBlock(
+          days: selectedDays,
+          startTime: startTime,
+          endTime: endTime,
+        ),
+      );
+    });
+  }
+
+  Future<void> _editPeriod(int index) async {
+    final currentBlock = periodBlocks[index];
+
+    final selectedDays = await Navigator.push<Set<DateTime>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          return _PeriodCalendarPicker(
+            initialSelectedDays: currentBlock.days,
+          );
+        },
+      ),
+    );
+
+    if (selectedDays == null || selectedDays.isEmpty || !mounted) {
+      return;
+    }
+
+    final startTime = await showTimePicker(
+      context: context,
+      initialTime: currentBlock.startTime,
+      builder: _timePickerThemeBuilder,
+    );
+
+    if (startTime == null || !mounted) {
+      return;
+    }
+
+    final endTime = await showTimePicker(
+      context: context,
+      initialTime: currentBlock.endTime,
+      builder: _timePickerThemeBuilder,
+    );
+
+    if (endTime == null) {
+      return;
+    }
+
+    setState(() {
+      periodBlocks[index] = _PeriodBlock(
+        days: selectedDays,
+        startTime: startTime,
+        endTime: endTime,
+      );
+    });
+  }
+
+  Widget _timePickerThemeBuilder(BuildContext context, Widget? child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          primary: AppColors.ratpGreen,
+          secondary: AppColors.ratpGreenDark,
+          surface: AppColors.surface,
+        ),
+      ),
+      child: child!,
+    );
+  }
+
+  void _removePeriod(int index) {
+    setState(() {
+      periodBlocks.removeAt(index);
+    });
+  }
+
+  String _timeOfDayToDatabaseString(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}:00';
+  }
+
+  String _formatDateOnly(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!isEditMode &&
+        !isRegisteringNewVisitor &&
+        selectedVisitor == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select an existing visitor or switch to "New visitor"',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if ((isEditMode || isRegisteringNewVisitor) &&
         (newNameController.text.trim().isEmpty ||
             newNationalIdController.text.trim().isEmpty ||
             newPhoneController.text.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all new visitor details')),
+        const SnackBar(
+          content: Text('Please fill in all visitor details'),
+        ),
       );
+
       return;
     }
 
     if (selectedHost == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select who they are visiting')),
+        const SnackBar(
+          content: Text('Please select who they are visiting'),
+        ),
       );
+
       return;
     }
 
     if (periodBlocks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one visit date')),
+        const SnackBar(
+          content: Text('Please add at least one visit date'),
+        ),
       );
+
       return;
     }
 
-    final List<VisitSchedule> schedules = [];
+    if (selectedStatus == 'invalid' &&
+        invalidReasonController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the invalid reason'),
+        ),
+      );
 
-    for (final block in periodBlocks) {
-      for (final day in block.days) {
-        schedules.add(VisitSchedule(
-          scheduledDate: day,
-          startTime: _timeOfDayToDbString(block.startTime),
-          endTime: _timeOfDayToDbString(block.endTime),
-        ));
-      }
+      return;
     }
 
-    setState(() => isSaving = true);
+    final schedules = <VisitSchedule>[];
 
-    try {
-      Visitor visitor;
-      if (!isRegisteringNewVisitor && selectedVisitor != null) {
-        visitor = selectedVisitor!;
-      } else {
-        visitor = await visitorService.createVisitor(
-          Visitor(
-            fullName: newNameController.text.trim(),
-            nationalId: newNationalIdController.text.trim(),
-            phone: newPhoneController.text.trim(),
+    for (final block in periodBlocks) {
+      final startMinutes = block.startTime.hour * 60 + block.startTime.minute;
+      final endMinutes = block.endTime.hour * 60 + block.endTime.minute;
+
+      if (endMinutes <= startMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Every end time must be after its start time'),
+          ),
+        );
+
+        return;
+      }
+
+      for (final day in block.days) {
+        schedules.add(
+          VisitSchedule(
+            scheduledDate: day,
+            startTime: _timeOfDayToDatabaseString(block.startTime),
+            endTime: _timeOfDayToDatabaseString(block.endTime),
           ),
         );
       }
+    }
 
-      final visit = Visit(
-        visitorId: visitor.id,
-        hostId: selectedHost!.id,
-        purpose: purposeController.text.trim(),
-        floor: floorController.text.trim(),
-        room: roomController.text.trim(),
-      );
+    setState(() {
+      isSaving = true;
+    });
 
-      final createdVisit = await visitService.createVisitWithSchedules(visit, schedules);
+    try {
+      if (isEditMode) {
+        await _saveEditedVisitor(schedules);
+        return;
+      }
 
+      await _createNewVisit(schedules);
+    } catch (error) {
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => QrResultPage(
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${error.toString()}'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveEditedVisitor(List<VisitSchedule> schedules) async {
+    final existingVisit = widget.visitToEdit!;
+
+    final visitorInfo = existingVisit['visitors'] as Map<String, dynamic>?;
+
+    final visitorId =
+        visitorInfo?['id']?.toString() ?? existingVisit['visitor_id']?.toString();
+
+    final visitId = existingVisit['id']?.toString();
+
+    if (visitorId == null || visitId == null) {
+      throw Exception('The visitor or visit ID is missing.');
+    }
+
+    await visitorService.updateVisitor(
+      visitorId,
+      {
+        'full_name': newNameController.text.trim(),
+        'national_id': newNationalIdController.text.trim(),
+        'phone': newPhoneController.text.trim(),
+      },
+    );
+
+    await visitService.updateVisit(
+      visitId,
+      {
+        'host_id': selectedHost!.id,
+        'purpose': purposeController.text.trim(),
+        'floor': floorController.text.trim(),
+        'room': roomController.text.trim(),
+        'status': selectedStatus,
+        'invalid_reason': selectedStatus == 'invalid'
+            ? invalidReasonController.text.trim()
+            : null,
+      },
+    );
+
+    await visitService.supabase
+        .from('visit_schedules')
+        .delete()
+        .eq('visit_id', visitId);
+
+    final scheduleRows = schedules.map(
+          (schedule) {
+        final map = schedule.toMap();
+
+        map['visit_id'] = visitId;
+
+        return map;
+      },
+    ).toList();
+
+    await visitService.supabase.from('visit_schedules').insert(scheduleRows);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Visitor updated successfully'),
+      ),
+    );
+
+    Navigator.pop(context, true);
+  }
+
+  Future<void> _createNewVisit(List<VisitSchedule> schedules) async {
+    Visitor visitor;
+
+    if (!isRegisteringNewVisitor && selectedVisitor != null) {
+      visitor = selectedVisitor!;
+    } else {
+      visitor = await visitorService.createVisitor(
+        Visitor(
+          fullName: newNameController.text.trim(),
+          nationalId: newNationalIdController.text.trim(),
+          phone: newPhoneController.text.trim(),
+        ),
+      );
+    }
+
+    final visit = Visit(
+      visitorId: visitor.id,
+      hostId: selectedHost!.id,
+      purpose: purposeController.text.trim(),
+      floor: floorController.text.trim(),
+      room: roomController.text.trim(),
+    );
+
+    final createdVisit = await visitService.createVisitWithSchedules(
+      visit,
+      schedules,
+    );
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          return QrResultPage(
             visitId: createdVisit.id!,
             visitorName: visitor.fullName,
             hostName: selectedHost!.fullName,
@@ -389,20 +859,11 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
             purpose: purposeController.text.trim(),
             floor: floorController.text.trim(),
             room: roomController.text.trim(),
-            // Full schedule objects, so the share message can show real
-            // start-end ranges instead of just a single time per day.
             schedules: schedules,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
-    } finally {
-      if (mounted) setState(() => isSaving = false);
-    }
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -415,234 +876,777 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
     purposeController.dispose();
     floorController.dispose();
     roomController.dispose();
+    invalidReasonController.dispose();
+
     super.dispose();
   }
 
-  // --- UI pieces ---
-
-  Widget _visitorSection() {
-    return Column(
+  Widget _sectionTitle({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Select Visitor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Row(
+        AppIconBadge(
+          icon: icon,
+          size: 42,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -.2,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _visitorSection() {
+    if (isEditMode) {
+      return SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ChoiceChip(
-              label: const Text('Existing visitor'),
-              selected: !isRegisteringNewVisitor,
-              onSelected: (_) => setState(() {
-                isRegisteringNewVisitor = false;
-              }),
+            _sectionTitle(
+              icon: Icons.badge_outlined,
+              title: 'Visitor Details',
+              subtitle: 'Update the visitor profile information.',
             ),
-            const SizedBox(width: 8),
-            ChoiceChip(
-              label: const Text('New visitor'),
-              selected: isRegisteringNewVisitor,
-              onSelected: (_) => setState(() {
-                isRegisteringNewVisitor = true;
-                selectedVisitor = null;
-              }),
+            const SizedBox(height: 18),
+            TextFormField(
+              controller: newNameController,
+              decoration: const InputDecoration(
+                labelText: 'Visitor Name',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: newNationalIdController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'National ID',
+                prefixIcon: Icon(Icons.credit_card_rounded),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: newPhoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (!isRegisteringNewVisitor) ...[
-          if (selectedVisitor != null)
-            Card(
-              child: ListTile(
-                title: Text(selectedVisitor!.fullName),
-                subtitle: Text('National ID: ${selectedVisitor!.nationalId}'),
-                trailing: TextButton(
-                  onPressed: () => setState(() {
+      );
+    }
+
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.person_search_rounded,
+            title: 'Select Visitor',
+            subtitle: 'Choose an existing visitor or register a new profile.',
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ChoiceChip(
+                avatar: Icon(
+                  Icons.people_alt_outlined,
+                  color: !isRegisteringNewVisitor
+                      ? Colors.white
+                      : AppColors.ratpGreenDark,
+                  size: 18,
+                ),
+                label: const Text('Existing visitor'),
+                selected: !isRegisteringNewVisitor,
+                onSelected: (_) {
+                  setState(() {
+                    isRegisteringNewVisitor = false;
+                  });
+                },
+              ),
+              ChoiceChip(
+                avatar: Icon(
+                  Icons.person_add_alt_1_rounded,
+                  color: isRegisteringNewVisitor
+                      ? Colors.white
+                      : AppColors.ratpGreenDark,
+                  size: 18,
+                ),
+                label: const Text('New visitor'),
+                selected: isRegisteringNewVisitor,
+                onSelected: (_) {
+                  setState(() {
+                    isRegisteringNewVisitor = true;
+                    selectedVisitor = null;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (!isRegisteringNewVisitor) ...[
+            if (selectedVisitor != null)
+              _selectedPersonCard(
+                icon: Icons.person_outline_rounded,
+                title: selectedVisitor!.fullName,
+                subtitle: 'National ID: ${selectedVisitor!.nationalId}',
+                onChange: () {
+                  setState(() {
                     selectedVisitor = null;
                     visitorSearchController.clear();
-                  }),
-                  child: const Text('Change'),
-                ),
+                  });
+                },
+              )
+            else
+              _SearchDropdownField<Visitor>(
+                controller: visitorSearchController,
+                labelText: 'Search by name or national ID',
+                icon: Icons.search_rounded,
+                itemsBuilder: () {
+                  return filteredVisitors;
+                },
+                itemLabelBuilder: (visitor) {
+                  return visitor.fullName;
+                },
+                itemSubtitleBuilder: (visitor) {
+                  return 'National ID: ${visitor.nationalId}';
+                },
+                onSelected: (visitor) {
+                  setState(() {
+                    selectedVisitor = visitor;
+                  });
+                },
               ),
-            )
-          else
-            _SearchDropdownField<Visitor>(
-              controller: visitorSearchController,
-              labelText: 'Search by name or national ID',
-              itemsBuilder: () => _filteredVisitors,
-              itemLabelBuilder: (v) => v.fullName,
-              itemSubtitleBuilder: (v) => 'National ID: ${v.nationalId}',
-              onSelected: (v) => setState(() => selectedVisitor = v),
+          ] else ...[
+            TextFormField(
+              controller: newNameController,
+              decoration: const InputDecoration(
+                labelText: 'Visitor Name',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
             ),
-        ] else ...[
-          TextFormField(
-            controller: newNameController,
-            decoration: const InputDecoration(labelText: 'Visitor Name', border: OutlineInputBorder()),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: newNationalIdController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'National ID',
+                prefixIcon: Icon(Icons.credit_card_rounded),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: newPhoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Required';
+                }
+
+                return null;
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _selectedPersonCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onChange,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          AppIconBadge(
+            icon: icon,
+            size: 44,
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: newNationalIdController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'National ID', border: OutlineInputBorder()),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: newPhoneController,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
+          TextButton.icon(
+            onPressed: onChange,
+            icon: const Icon(
+              Icons.swap_horiz_rounded,
+              size: 18,
+            ),
+            label: const Text('Change'),
           ),
         ],
-      ],
+      ),
     );
   }
 
   Widget _hostSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Person They Are Visiting', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        if (selectedHost != null)
-          Card(
-            child: ListTile(
-              title: Text(selectedHost!.fullName),
-              subtitle: Text(selectedHost!.department),
-              trailing: TextButton(
-                onPressed: () => setState(() {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.business_center_outlined,
+            title: 'Person They Are Visiting',
+            subtitle: 'Select the host employee and department.',
+          ),
+          const SizedBox(height: 18),
+          if (selectedHost != null)
+            _selectedPersonCard(
+              icon: Icons.work_outline_rounded,
+              title: selectedHost!.fullName,
+              subtitle: selectedHost!.department,
+              onChange: () {
+                setState(() {
                   selectedHost = null;
                   hostSearchController.clear();
                   selectedDepartmentFilter = null;
-                }),
-                child: const Text('Change'),
+                });
+              },
+            )
+          else ...[
+            DropdownButtonFormField<String?>(
+              initialValue: selectedDepartmentFilter,
+              decoration: const InputDecoration(
+                labelText: 'Department',
+                prefixIcon: Icon(Icons.apartment_rounded),
               ),
+              hint: const Text('Select department'),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('All departments'),
+                ),
+                ...departments.map(
+                      (department) {
+                    return DropdownMenuItem<String?>(
+                      value: department,
+                      child: Text(department),
+                    );
+                  },
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  selectedDepartmentFilter = value;
+                });
+              },
             ),
-          )
-        else ...[
-          DropdownButtonFormField<String?>(
-            initialValue: selectedDepartmentFilter,
+            const SizedBox(height: 14),
+            _SearchDropdownField<Employee>(
+              controller: hostSearchController,
+              labelText: 'Search host by name',
+              icon: Icons.manage_search_rounded,
+              itemsBuilder: () {
+                return filteredEmployees;
+              },
+              itemLabelBuilder: (employee) {
+                return employee.fullName;
+              },
+              itemSubtitleBuilder: (employee) {
+                return employee.department;
+              },
+              onSelected: (employee) {
+                setState(() {
+                  selectedHost = employee;
+                });
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _visitInformationSection() {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.route_rounded,
+            title: 'Visit Information',
+            subtitle: 'Add the reason, floor, and room for this visit.',
+          ),
+          const SizedBox(height: 18),
+          TextFormField(
+            controller: purposeController,
             decoration: const InputDecoration(
-              border: OutlineInputBorder(),
+              labelText: 'Purpose of Visit',
+              prefixIcon: Icon(Icons.description_outlined),
             ),
-            hint: const Text('Select department'),
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('All departments'),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Required';
+              }
+
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: floorController,
+                  decoration: const InputDecoration(
+                    labelText: 'Floor',
+                    prefixIcon: Icon(Icons.layers_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Required';
+                    }
+
+                    return null;
+                  },
+                ),
               ),
-              ..._departments.map(
-                    (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: roomController,
+                  decoration: const InputDecoration(
+                    labelText: 'Room',
+                    prefixIcon: Icon(Icons.meeting_room_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Required';
+                    }
+
+                    return null;
+                  },
+                ),
               ),
             ],
-            onChanged: (value) => setState(() => selectedDepartmentFilter = value),
-          ),
-          const SizedBox(height: 12),
-          _SearchDropdownField<Employee>(
-            controller: hostSearchController,
-            labelText: 'Search by name',
-            itemsBuilder: () => _filteredEmployees,
-            itemLabelBuilder: (e) => e.fullName,
-            itemSubtitleBuilder: (e) => e.department,
-            onSelected: (e) => setState(() => selectedHost = e),
           ),
         ],
-      ],
+      ),
     );
   }
 
   Widget _scheduleSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...periodBlocks.asMap().entries.map((entry) {
-          final index = entry.key;
-          final block = entry.value;
-          final sortedDays = block.days.toList()..sort();
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              title: Text('${block.days.length} day(s) selected'),
-              subtitle: Text(
-                '${sortedDays.map(_formatDateOnly).join(", ")}\n'
-                    '${block.startTime.format(context)} – ${block.endTime.format(context)}',
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.event_available_outlined,
+            title: 'Visit Date(s)',
+            subtitle: 'Choose the allowed days and time window.',
+          ),
+          const SizedBox(height: 18),
+          if (periodBlocks.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(color: AppColors.line),
               ),
-              isThreeLine: true,
-              trailing: IconButton(
-                icon: const Icon(Icons.remove_circle, color: Colors.red),
-                onPressed: () => _removePeriod(index),
+              child: const Column(
+                children: [
+                  AppIconBadge(
+                    icon: Icons.calendar_month_rounded,
+                    size: 54,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'No visit dates added yet',
+                    style: TextStyle(
+                      color: AppColors.navy,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Add at least one date before saving.',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
+            )
+          else
+            ...periodBlocks.asMap().entries.map(
+                  (entry) {
+                final index = entry.key;
+                final block = entry.value;
+
+                final sortedDays = block.days.toList()..sort();
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(AppRadius.medium),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppIconBadge(
+                        icon: Icons.calendar_today_rounded,
+                        size: 44,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${block.days.length} day(s) selected',
+                              style: const TextStyle(
+                                color: AppColors.ink,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              sortedDays.map(_formatDateOnly).join(', '),
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                height: 1.35,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.softGreen,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '${block.startTime.format(context)} – ${block.endTime.format(context)}',
+                                style: const TextStyle(
+                                  color: AppColors.ratpGreenDark,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit schedule',
+                            icon: const Icon(
+                              Icons.edit_note_rounded,
+                              color: AppColors.warning,
+                            ),
+                            onPressed: () {
+                              _editPeriod(index);
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Remove schedule',
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: AppColors.danger,
+                            ),
+                            onPressed: () {
+                              _removePeriod(index);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          );
-        }),
-        TextButton.icon(
-          onPressed: _addPeriod,
-          icon: const Icon(Icons.add),
-          label: const Text('Add Visit Date(s)'),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _addPeriod,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add Visit Date(s)'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusSection() {
+    if (!isEditMode) {
+      return const SizedBox.shrink();
+    }
+
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.verified_user_outlined,
+            title: 'Visit Status',
+            subtitle: 'Control whether this visit is active or invalid.',
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<String>(
+            initialValue: selectedStatus,
+            decoration: const InputDecoration(
+              labelText: 'Status',
+              prefixIcon: Icon(Icons.fact_check_outlined),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'active',
+                child: Text('Active'),
+              ),
+              DropdownMenuItem(
+                value: 'invalid',
+                child: Text('Invalid'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+
+              setState(() {
+                selectedStatus = value;
+
+                if (value == 'active') {
+                  invalidReasonController.clear();
+                }
+              });
+            },
+          ),
+          if (selectedStatus == 'invalid') ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: invalidReasonController,
+              decoration: const InputDecoration(
+                labelText: 'Invalid Reason',
+                prefixIcon: Icon(Icons.report_problem_outlined),
+              ),
+              validator: (value) {
+                if (selectedStatus == 'invalid' &&
+                    (value == null || value.trim().isEmpty)) {
+                  return 'Required';
+                }
+
+                return null;
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _loadingPage() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(isEditMode ? 'Edit Visitor' : 'New Visitor'),
+      ),
+      body: const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.ratpGreen,
         ),
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoadingData) {
+      return _loadingPage();
+    }
+
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.lightBlue,
-        title: const Text('New Visitor'),
+        title: Text(
+          isEditMode ? 'Edit Visitor' : 'New Visitor',
+        ),
       ),
-      body: isLoadingData
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              _visitorSection(),
-              const SizedBox(height: 24),
-              _hostSection(),
-              const SizedBox(height: 24),
-              TextFormField(
-                controller: purposeController,
-                decoration: const InputDecoration(labelText: 'Purpose of Visit', border: OutlineInputBorder()),
-                validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null,
-              ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+          children: [
+            PageHeader(
+              title: isEditMode ? 'Edit visitor request' : 'Create visitor request',
+              subtitle: isEditMode
+                  ? 'Review and update the visitor profile, host, schedule, and status.'
+                  : 'Register a visitor, assign a host, and generate their access request.',
+              icon: isEditMode
+                  ? Icons.edit_note_rounded
+                  : Icons.person_add_alt_1_rounded,
+            ),
+            const SizedBox(height: 18),
+            _visitorSection(),
+            const SizedBox(height: 16),
+            _hostSection(),
+            const SizedBox(height: 16),
+            _visitInformationSection(),
+            const SizedBox(height: 16),
+            _scheduleSection(),
+            if (isEditMode) ...[
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: floorController,
-                      decoration: const InputDecoration(labelText: 'Floor', border: OutlineInputBorder()),
-                      validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: roomController,
-                      decoration: const InputDecoration(labelText: 'Room', border: OutlineInputBorder()),
-                      validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Text('Visit Date(s)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              _scheduleSection(),
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: isSaving ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.lightBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
-                  ),
-                  child: isSaving
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Register Visit', style: TextStyle(fontSize: 18)),
-                ),
-              ),
+              _statusSection(),
             ],
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          16 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: const Border(
+            top: BorderSide(color: AppColors.line),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(.05),
+              blurRadius: 24,
+              offset: const Offset(0, -10),
+            ),
+          ],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: isSaving ? null : _submit,
+          icon: isSaving
+              ? const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 3,
+            ),
+          )
+              : Icon(
+            isEditMode
+                ? Icons.save_as_rounded
+                : Icons.qr_code_2_rounded,
+          ),
+          label: Text(
+            isSaving
+                ? 'Saving...'
+                : isEditMode
+                ? 'Save Changes'
+                : 'Register Visit',
           ),
         ),
       ),
@@ -650,29 +1654,70 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
   }
 }
 
-// Full-screen calendar for picking a scattered set of individual days for a period.
 class _PeriodCalendarPicker extends StatefulWidget {
-  const _PeriodCalendarPicker();
+  final Set<DateTime> initialSelectedDays;
+
+  const _PeriodCalendarPicker({
+    this.initialSelectedDays = const {},
+  });
 
   @override
-  State<_PeriodCalendarPicker> createState() => _PeriodCalendarPickerState();
+  State<_PeriodCalendarPicker> createState() {
+    return _PeriodCalendarPickerState();
+  }
 }
 
 class _PeriodCalendarPickerState extends State<_PeriodCalendarPicker> {
-  final Set<DateTime> selectedDays = {};
-  DateTime focusedDay = DateTime.now();
+  late final Set<DateTime> selectedDays;
+  late DateTime focusedDay;
+
+  @override
+  void initState() {
+    super.initState();
+
+    selectedDays = widget.initialSelectedDays
+        .map(
+          (day) => DateTime(
+        day.year,
+        day.month,
+        day.day,
+      ),
+    )
+        .toSet();
+
+    if (selectedDays.isEmpty) {
+      focusedDay = DateTime.now();
+    } else {
+      final sortedDays = selectedDays.toList()..sort();
+
+      focusedDay = sortedDays.first;
+    }
+  }
 
   bool _isSelected(DateTime day) {
-    return selectedDays.any((d) => isSameDay(d, day));
+    return selectedDays.any(
+          (selectedDay) {
+        return isSameDay(selectedDay, day);
+      },
+    );
   }
 
   void _toggleDay(DateTime day) {
-    final normalized = DateTime(day.year, day.month, day.day);
+    final normalizedDay = DateTime(
+      day.year,
+      day.month,
+      day.day,
+    );
+
     setState(() {
-      if (_isSelected(normalized)) {
-        selectedDays.removeWhere((d) => isSameDay(d, normalized));
+      if (_isSelected(normalizedDay)) {
+        selectedDays.removeWhere(
+              (selectedDay) {
+            return isSameDay(selectedDay, normalizedDay);
+          },
+        );
       } else {
-        selectedDays.add(normalized);
+        selectedDays.add(normalizedDay);
       }
     });
   }
@@ -680,55 +1725,134 @@ class _PeriodCalendarPickerState extends State<_PeriodCalendarPicker> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.lightBlue,
         title: const Text('Select period days'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, selectedDays),
-            child: const Text('Done', style: TextStyle(color: Colors.white)),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context, selectedDays);
+            },
+            icon: const Icon(Icons.done_rounded),
+            label: const Text('Done'),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          TableCalendar(
-            firstDay: DateTime.now().subtract(const Duration(days: 1)),
-            lastDay: DateTime.now().add(const Duration(days: 365)),
-            focusedDay: focusedDay,
-            selectedDayPredicate: _isSelected,
-            // The weekday-names row (Sun, Mon, Tue...) was getting visually
-            // clipped/overlapped by the calendar grid below it because the
-            // default row height (16px) is shorter than its own text plus
-            // padding. Giving it explicit room fixes the overlap.
-            daysOfWeekHeight: 40,
-            rowHeight: 48,
-            // Keeps every month rendered at a fixed 6-row height so the
-            // calendar doesn't resize (and re-trigger the overlap) when
-            // paging between months with different week counts.
-            sixWeekMonthsEnforced: true,
-            onDaySelected: (selected, focused) {
-              setState(() => focusedDay = focused);
-              _toggleDay(selected);
-            },
-            onPageChanged: (focused) => focusedDay = focused,
-            calendarStyle: CalendarStyle(
-              selectedDecoration: BoxDecoration(color: Colors.lightBlue.shade700, shape: BoxShape.circle),
-              todayDecoration: BoxDecoration(color: Colors.lightBlue.shade100, shape: BoxShape.circle),
+          PageHeader(
+            title: 'Choose visit days',
+            subtitle: 'Tap any day to select or deselect it. Days do not need to be consecutive.',
+            icon: Icons.calendar_month_rounded,
+          ),
+          const SizedBox(height: 18),
+          SectionCard(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 20),
+            child: TableCalendar(
+              firstDay: DateTime(2020, 1, 1),
+              lastDay: DateTime.now().add(
+                const Duration(days: 365),
+              ),
+              focusedDay: focusedDay,
+              selectedDayPredicate: _isSelected,
+              daysOfWeekHeight: 40,
+              rowHeight: 48,
+              sixWeekMonthsEnforced: true,
+              onDaySelected: (
+                  selectedDay,
+                  newFocusedDay,
+                  ) {
+                setState(() {
+                  focusedDay = newFocusedDay;
+                });
+
+                _toggleDay(selectedDay);
+              },
+              onPageChanged: (
+                  newFocusedDay,
+                  ) {
+                focusedDay = newFocusedDay;
+              },
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                titleTextStyle: TextStyle(
+                  color: AppColors.navy,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                ),
+                leftChevronIcon: Icon(
+                  Icons.chevron_left_rounded,
+                  color: AppColors.ratpGreenDark,
+                ),
+                rightChevronIcon: Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.ratpGreenDark,
+                ),
+              ),
+              daysOfWeekStyle: const DaysOfWeekStyle(
+                weekdayStyle: TextStyle(
+                  color: AppColors.muted,
+                  fontWeight: FontWeight.w800,
+                ),
+                weekendStyle: TextStyle(
+                  color: AppColors.muted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              calendarStyle: CalendarStyle(
+                selectedDecoration: const BoxDecoration(
+                  color: AppColors.ratpGreen,
+                  shape: BoxShape.circle,
+                ),
+                todayDecoration: BoxDecoration(
+                  color: AppColors.ratpGreen.withOpacity(.16),
+                  shape: BoxShape.circle,
+                ),
+                todayTextStyle: const TextStyle(
+                  color: AppColors.ratpGreenDark,
+                  fontWeight: FontWeight.w900,
+                ),
+                selectedTextStyle: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+                defaultTextStyle: const TextStyle(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                ),
+                weekendTextStyle: const TextStyle(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                ),
+                outsideTextStyle: TextStyle(
+                  color: AppColors.muted.withOpacity(.45),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            '${selectedDays.length} day(s) selected',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              'Tap any day to select or deselect it. Selected days don\'t need to be in a row.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+          const SizedBox(height: 18),
+          SectionCard(
+            child: Row(
+              children: [
+                const AppIconBadge(
+                  icon: Icons.check_circle_outline_rounded,
+                  size: 48,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    '${selectedDays.length} day(s) selected',
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
