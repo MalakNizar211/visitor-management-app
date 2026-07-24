@@ -285,6 +285,8 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
 
   List<Employee> employees = [];
   Employee? selectedHost;
+  Employee? myEmployeeRecord; // the logged-in user's own employee row
+  bool isBookingForSomeoneElse = false;
 
   String? selectedDepartmentFilter;
 
@@ -349,6 +351,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
     try {
       final visitors = await visitorService.getAllVisitors();
       final employeesList = await employeeService.getAllEmployees();
+      final myRecord = await employeeService.getMyEmployeeRecord();
 
       Employee? host;
 
@@ -372,6 +375,9 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
         final scheduleMaps = (visit['visit_schedules'] as List?) ?? [];
 
         loadedPeriods = _periodBlocksFromScheduleMaps(scheduleMaps);
+      } else {
+        // Not editing - default the host to the logged-in user themselves
+        host = myRecord;
       }
 
       if (!mounted) return;
@@ -379,6 +385,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
       setState(() {
         existingVisitors = visitors;
         employees = employeesList;
+        myEmployeeRecord = myRecord;
         selectedHost = host;
         periodBlocks = loadedPeriods;
         isLoadingData = false;
@@ -1127,7 +1134,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
     required IconData icon,
     required String title,
     required String subtitle,
-    required VoidCallback onChange,
+    VoidCallback? onChange,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1167,20 +1174,38 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
               ],
             ),
           ),
-          TextButton.icon(
-            onPressed: onChange,
-            icon: const Icon(
-              Icons.swap_horiz_rounded,
-              size: 18,
+          if (onChange != null)
+            TextButton.icon(
+              onPressed: onChange,
+              icon: const Icon(
+                Icons.swap_horiz_rounded,
+                size: 18,
+              ),
+              label: const Text('Change'),
             ),
-            label: const Text('Change'),
-          ),
         ],
       ),
     );
   }
 
   Widget _hostSection() {
+    // Edit mode keeps the existing full dropdown behavior, unchanged.
+    if (isEditMode) {
+      return _hostSectionDropdownMode();
+    }
+
+    // Not edit mode, and this logged-in user has no employee record at all -
+    // fall back to the full dropdown (shouldn't normally happen, but safe).
+    if (myEmployeeRecord == null) {
+      return _hostSectionDropdownMode();
+    }
+
+    // Booking for someone else was toggled on - show the searchable dropdown.
+    if (isBookingForSomeoneElse) {
+      return _hostSectionDropdownMode(showCancelDelegation: true);
+    }
+
+    // Default case: locked to the logged-in user's own name/department.
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1188,7 +1213,40 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.business_center_outlined,
             title: 'Person They Are Visiting',
-            subtitle: 'Select the host employee and department.',
+            subtitle: 'This visit is registered under your own name.',
+          ),
+          const SizedBox(height: 18),
+          _selectedPersonCard(
+            icon: Icons.work_outline_rounded,
+            title: myEmployeeRecord!.fullName,
+            subtitle: myEmployeeRecord!.department,
+            onChange: myEmployeeRecord!.canBookForOthers
+                ? () {
+              setState(() {
+                isBookingForSomeoneElse = true;
+                selectedHost = null;
+                hostSearchController.clear();
+                selectedDepartmentFilter = null;
+              });
+            }
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hostSectionDropdownMode({bool showCancelDelegation = false}) {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(
+            icon: Icons.business_center_outlined,
+            title: 'Person They Are Visiting',
+            subtitle: showCancelDelegation
+                ? 'Select who this visitor is coming to see.'
+                : 'Select the host employee and department.',
           ),
           const SizedBox(height: 18),
           if (selectedHost != null)
@@ -1251,6 +1309,24 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
                   selectedHost = employee;
                 });
               },
+            ),
+          ],
+          if (showCancelDelegation) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    isBookingForSomeoneElse = false;
+                    selectedHost = myEmployeeRecord;
+                    hostSearchController.clear();
+                    selectedDepartmentFilter = null;
+                  });
+                },
+                icon: const Icon(Icons.undo_rounded),
+                label: const Text('Book for myself instead'),
+              ),
             ),
           ],
         ],

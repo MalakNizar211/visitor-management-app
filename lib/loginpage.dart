@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'services/employee_service.dart';
 import 'app_theme.dart';
 import 'home.dart';
 import 'security_home.dart';
@@ -36,30 +36,23 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text.trim(),
       );
 
-      final userId = supabase.auth.currentUser!.id;
 
-      final profile = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', userId)
-          .single();
-
-      final role = profile['role'];
+      final myRecord = await EmployeeService().getMyEmployeeRecord();
 
       if (!mounted) return;
 
-      if (role == 'hr') {
+      if (myRecord != null && myRecord.department == 'Security') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => const Home(),
+            builder: (context) => const SecurityHome(),
           ),
         );
       } else {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => const SecurityHome(),
+            builder: (context) => const Home(),
           ),
         );
       }

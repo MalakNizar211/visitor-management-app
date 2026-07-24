@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mobile_application/security_home.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'auth_gate.dart';
 import 'app_theme.dart';
 
 Future<void> main() async {
@@ -188,7 +188,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const SecurityHome(),
+      home: const AuthGate(),
     );
   }
 }
