@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'app_theme.dart';
+import 'custom_time_picker.dart';
 import 'models/employee_model.dart';
 import 'models/visit_model.dart';
 import 'models/visit_schedule_model.dart';
@@ -533,32 +534,21 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
       return;
     }
 
-    final startTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-      builder: _timePickerThemeBuilder,
+    final range = await _pickValidTimeRange(
+      selectedDays: selectedDays,
     );
 
-    if (startTime == null || !mounted) {
+    if (range == null || !mounted) {
       return;
     }
 
-    final endTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-      builder: _timePickerThemeBuilder,
-    );
-
-    if (endTime == null) {
-      return;
-    }
 
     setState(() {
       periodBlocks.add(
         _PeriodBlock(
           days: selectedDays,
-          startTime: startTime,
-          endTime: endTime,
+          startTime: range.start,
+          endTime: range.end,
         ),
       );
     });
@@ -582,46 +572,58 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
       return;
     }
 
-    final startTime = await showTimePicker(
-      context: context,
-      initialTime: currentBlock.startTime,
-      builder: _timePickerThemeBuilder,
+    final range = await _pickValidTimeRange(
+      selectedDays: selectedDays,
+      initialStart: currentBlock.startTime,
+      initialEnd: currentBlock.endTime,
     );
 
-    if (startTime == null || !mounted) {
-      return;
-    }
-
-    final endTime = await showTimePicker(
-      context: context,
-      initialTime: currentBlock.endTime,
-      builder: _timePickerThemeBuilder,
-    );
-
-    if (endTime == null) {
+    if (range == null || !mounted) {
       return;
     }
 
     setState(() {
       periodBlocks[index] = _PeriodBlock(
         days: selectedDays,
-        startTime: startTime,
-        endTime: endTime,
+        startTime: range.start,
+        endTime: range.end,
       );
     });
   }
 
-  Widget _timePickerThemeBuilder(BuildContext context, Widget? child) {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        colorScheme: Theme.of(context).colorScheme.copyWith(
-          primary: AppColors.ratpGreen,
-          secondary: AppColors.ratpGreenDark,
-          surface: AppColors.surface,
-        ),
-      ),
-      child: child!,
+  /// Opens a single time-range picker dialog that walks the user through
+  /// choosing a start time and then an end time, without closing and
+  /// reopening a separate [Dialog] for each step. The dialog itself only
+  /// ever surfaces reachable (valid) times - there is nothing left to
+  /// validate afterwards, so no error SnackBars are needed here.
+  Future<({TimeOfDay start, TimeOfDay end})?> _pickValidTimeRange({
+    required Set<DateTime> selectedDays,
+    TimeOfDay? initialStart,
+    TimeOfDay? initialEnd,
+  }) async {
+    final today = DateTime.now();
+
+    final includesToday = selectedDays.any(
+          (day) =>
+      day.year == today.year &&
+          day.month == today.month &&
+          day.day == today.day,
     );
+
+    // Start time can't be before "now" when one of the selected days is
+    // today. Otherwise there's no lower bound.
+    final startMinTime = includesToday ? TimeOfDay.now() : null;
+
+    final range = await showCustomTimeRangePicker(
+      context: context,
+      initialStart: initialStart,
+      initialEnd: initialEnd,
+      minStartTime: startMinTime,
+    );
+
+    if (range == null || !mounted) return null;
+
+    return range;
   }
 
   void _removePeriod(int index) {
@@ -1001,7 +1003,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.person_search_rounded,
             title: 'Select Visitor',
-            subtitle: 'Choose an existing visitor or register a new profile.',
+            subtitle: 'Select a registered visitor or create a new one.',
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -1016,7 +1018,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
                       : AppColors.ratpGreenDark,
                   size: 18,
                 ),
-                label: const Text('Existing visitor'),
+                label: const Text('Registered Visitor'),
                 selected: !isRegisteringNewVisitor,
                 onSelected: (_) {
                   setState(() {
@@ -1032,7 +1034,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
                       : AppColors.ratpGreenDark,
                   size: 18,
                 ),
-                label: const Text('New visitor'),
+                label: const Text('New Visitor'),
                 selected: isRegisteringNewVisitor,
                 onSelected: (_) {
                   setState(() {
@@ -1213,7 +1215,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.business_center_outlined,
             title: 'Person They Are Visiting',
-            subtitle: 'This visit is registered under your own name.',
+            subtitle: "You're the assigned host.",
           ),
           const SizedBox(height: 18),
           _selectedPersonCard(
@@ -1245,8 +1247,8 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
             icon: Icons.business_center_outlined,
             title: 'Person They Are Visiting',
             subtitle: showCancelDelegation
-                ? 'Select who this visitor is coming to see.'
-                : 'Select the host employee and department.',
+                ? 'Choose the employee to visit.'
+                : 'Select the host employee.',
           ),
           const SizedBox(height: 18),
           if (selectedHost != null)
@@ -1342,7 +1344,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.route_rounded,
             title: 'Visit Information',
-            subtitle: 'Add the reason, floor, and room for this visit.',
+            subtitle: 'Enter the visit details.',
           ),
           const SizedBox(height: 18),
           TextFormField(
@@ -1410,7 +1412,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.event_available_outlined,
             title: 'Visit Date(s)',
-            subtitle: 'Choose the allowed days and time window.',
+            subtitle: 'Select the visit date and time.',
           ),
           const SizedBox(height: 18),
           if (periodBlocks.isEmpty)
@@ -1505,7 +1507,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
-                                '${block.startTime.format(context)} – ${block.endTime.format(context)}',
+                                '${block.startTime.format(context)} \u2013 ${block.endTime.format(context)}',
                                 style: const TextStyle(
                                   color: AppColors.ratpGreenDark,
                                   fontWeight: FontWeight.w900,
@@ -1571,7 +1573,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           _sectionTitle(
             icon: Icons.verified_user_outlined,
             title: 'Visit Status',
-            subtitle: 'Control whether this visit is active or invalid.',
+            subtitle: 'Update the visit status.',
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<String>(
@@ -1652,16 +1654,19 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
           isEditMode ? 'Edit Visitor' : 'New Visitor',
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Form(
+            key: _formKey,
+            child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
           children: [
             PageHeader(
               title: isEditMode ? 'Edit visitor request' : 'Create visitor request',
               subtitle: isEditMode
-                  ? 'Review and update the visitor profile, host, schedule, and status.'
-                  : 'Register a visitor, assign a host, and generate their access request.',
+                  ? 'Update visitor information and visit details.'
+                  : 'Register a visitor and schedule their visit.',
               icon: isEditMode
                   ? Icons.edit_note_rounded
                   : Icons.person_add_alt_1_rounded,
@@ -1680,7 +1685,7 @@ class _NewVisitorPageState extends State<NewVisitorPage> {
             ],
           ],
         ),
-      ),
+      ),),
       bottomNavigationBar: Container(
         padding: EdgeInsets.fromLTRB(
           16,
@@ -1804,30 +1809,35 @@ class _PeriodCalendarPickerState extends State<_PeriodCalendarPicker> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Select period days'),
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(context, selectedDays);
-            },
-            icon: const Icon(Icons.done_rounded),
-            label: const Text('Done'),
-          ),
-          const SizedBox(width: 8),
-        ],
+
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           PageHeader(
             title: 'Choose visit days',
-            subtitle: 'Tap any day to select or deselect it. Days do not need to be consecutive.',
+            subtitle:
+            'Select one or more visit dates.',
             icon: Icons.calendar_month_rounded,
           ),
           const SizedBox(height: 18),
           SectionCard(
             padding: const EdgeInsets.fromLTRB(8, 12, 8, 20),
             child: TableCalendar(
-              firstDay: DateTime(2020, 1, 1),
+              firstDay: DateTime(
+                DateTime.now().year,
+                DateTime.now().month,
+                DateTime.now().day,
+              ),
+              enabledDayPredicate: (day) {
+                final today = DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                );
+
+                return !day.isBefore(today);
+              },
               lastDay: DateTime.now().add(
                 const Duration(days: 365),
               ),
@@ -1920,7 +1930,7 @@ class _PeriodCalendarPickerState extends State<_PeriodCalendarPicker> {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
-                    '${selectedDays.length} day(s) selected',
+                    '${selectedDays.length} ${selectedDays.length == 1 ? "day" : "days"} selected',
                     style: const TextStyle(
                       color: AppColors.navy,
                       fontSize: 17,
@@ -1929,6 +1939,20 @@ class _PeriodCalendarPickerState extends State<_PeriodCalendarPicker> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: selectedDays.isEmpty
+                  ? null
+                  : () {
+                Navigator.pop(context, selectedDays);
+              },
+              icon: const Icon(Icons.done_rounded),
+              label: const Text('Confirm Selection'),
             ),
           ),
         ],
