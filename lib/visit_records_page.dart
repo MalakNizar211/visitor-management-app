@@ -738,7 +738,6 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
   Widget _filtersHeader() {
     return Container(
       color: AppColors.background,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
         children: [
           PageHeader(
@@ -818,8 +817,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
   }
 
   Widget _recordsBody() {
-    return Expanded(
-      child: RefreshIndicator(
+    return RefreshIndicator(
         color: AppColors.ratpGreen,
         onRefresh: () async {
           _refresh();
@@ -855,7 +853,6 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
             );
           },
         ),
-      ),
     );
   }
 
@@ -866,11 +863,46 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
       appBar: AppBar(
         title: const Text('Visit Records'),
       ),
-      body: Column(
-        children: [
-          _filtersHeader(),
-          _recordsBody(),
-        ],
+      body: RefreshIndicator(
+        color: AppColors.ratpGreen,
+        onRefresh: () async {
+          _refresh();
+        },
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: recordsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.ratpGreen,
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return _errorState(snapshot.error!);
+            }
+
+            final records = _applySearch(snapshot.data ?? []);
+
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                _filtersHeader(),
+                const SizedBox(height: 8),
+
+                if (records.isEmpty)
+                  ...[
+                    const SizedBox(height: 40),
+                    _emptyState(),
+                  ]
+                else
+                  ...records.map((record) => _recordCard(record)),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
