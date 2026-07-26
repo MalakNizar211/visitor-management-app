@@ -191,7 +191,7 @@ class _VerificationPageState extends State<VerificationPage> {
 
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
           surfaceTintColor: AppColors.surface,
@@ -236,20 +236,20 @@ class _VerificationPageState extends State<VerificationPage> {
           actions: [
             OutlinedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                if (reasonController.text.trim().isEmpty) {
+                final text = reasonController.text.trim();
+
+                if (text.isEmpty) {
                   return;
                 }
 
-                Navigator.pop(
-                  context,
-                  reasonController.text.trim(),
-                );
+                FocusScope.of(dialogContext).unfocus();
+                Navigator.pop(dialogContext, text);
               },
               child: const Text('Confirm'),
             ),
@@ -264,40 +264,57 @@ class _VerificationPageState extends State<VerificationPage> {
       return;
     }
 
+    if (!mounted) return;
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     setState(() {
       isProcessing = true;
     });
 
-    final result = await visitService.markInvalid(
-      visit.id!,
-      reason,
-    );
+    try {
+      final result = await visitService.markInvalid(
+        visit.id!,
+        reason,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      isProcessing = false;
-    });
+      setState(() {
+        isProcessing = false;
+      });
 
-    if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      if (result == null) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Failed to update - please try again.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      navigator.pop();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        isProcessing = false;
+      });
+
+      messenger.showSnackBar(
+        SnackBar(
           content: Text(
-            'Failed to update - please try again.',
+            'Failed: ${error.toString()}',
           ),
         ),
       );
-
-      return;
     }
-
-    Navigator.pop(context);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('QR marked as invalid'),
-      ),
-    );
   }
 
   String _formatTime(DateTime dateTime) {
@@ -852,7 +869,6 @@ class _VerificationPageState extends State<VerificationPage> {
               );
             },
           );
-
           final cancelButton = actionButton(
             label: isEntryScan ? 'No' : 'Cancel',
             icon: Icons.close_rounded,

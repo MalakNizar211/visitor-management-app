@@ -127,7 +127,9 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
-  // Looks at today's most recent log entry only
+  // Looks at today's most recent real entry/exit log only.
+  // Important: invalid logs are ignored here.
+  // This fixes the case where HR changes an invalid visit back to active.
   Future<String?> getTodaysLatestLogAction(String visitId) async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).toUtc();
@@ -137,6 +139,7 @@ class VisitService {
         .from('visit_logs')
         .select()
         .eq('visit_id', visitId)
+        .inFilter('action', ['check_in', 'check_out'])
         .gte('scanned_at', startOfDay.toIso8601String())
         .lt('scanned_at', startOfNextDay.toIso8601String())
         .order('scanned_at', ascending: false)
@@ -154,7 +157,9 @@ class VisitService {
 
     if (lastAction == null) return 'check_in';
     if (lastAction == 'check_in') return 'check_out';
-    return 'completed';
+    if (lastAction == 'check_out') return 'completed';
+
+    return 'check_in';
   }
 
   // Gets check-in/check-out summary for any specific date.
@@ -207,6 +212,7 @@ class VisitService {
   }
 
   // For the security history page
+  // For the security history page
   Future<List<Map<String, dynamic>>> getVisitRecordsForDate(DateTime date) async {
     final startOfDay = DateTime(date.year, date.month, date.day).toUtc();
     final startOfNextDay = startOfDay.add(const Duration(days: 1));
@@ -220,78 +226,107 @@ class VisitService {
 
     final logs = (logsResponse as List).cast<Map<String, dynamic>>();
 
+    if (logs.isEmpty) {
+      return [];
+    }
+
     final visitIds = logs.map((l) => l['visit_id'] as String).toSet().toList();
 
-    final dynamic visitsResponse = visitIds.isEmpty
-        ? <Map<String, dynamic>>[]
-        : await supabase
+    final visitsResponse = await supabase
         .from('visits')
         .select('*, visitors(*), employees(*)')
         .inFilter('id', visitIds);
 
     final visits = (visitsResponse as List).cast<Map<String, dynamic>>();
+
     final Map<String, Map<String, dynamic>> visitById = {
       for (final v in visits) v['id'] as String: v,
     };
 
-    final Map<String, Map<String, dynamic>> recordsByVisit = {};
+    Map<String, dynamic> baseRecordForVisit(String visitId) {
+      final visit = visitById[visitId];
 
-    for (final log in logs) {
-      final visitId = log['visit_id'] as String;
-      final action = log['action']?.toString();
+      final visitorInfo = visit?['visitors'] as Map<String, dynamic>?;
+      final employeeInfo = visit?['employees'] as Map<String, dynamic>?;
 
-      final record = recordsByVisit.putIfAbsent(
-        visitId,
-            () => {
-          'visit_id': visitId,
-          'check_in_time': null,
-          'check_out_time': null,
-          'invalid_time': null,
-        },
-      );
-
-      if (action == 'check_in' && record['check_in_time'] == null) {
-        record['check_in_time'] = log['scanned_at'];
-      } else if (action == 'check_out') {
-        record['check_out_time'] = log['scanned_at'];
-      } else if (action == 'invalid') {
-        record['invalid_time'] = log['scanned_at'];
-      }
-    }
-
-    final records = <Map<String, dynamic>>[];
-
-    for (final entry in recordsByVisit.entries) {
-      final visit = visitById[entry.key];
-      if (visit == null) continue;
-
-      final visitorInfo = visit['visitors'] as Map<String, dynamic>?;
-      final employeeInfo = visit['employees'] as Map<String, dynamic>?;
-
-      records.add({
-        'visit_id': entry.key,
+      return {
+        'visit_id': visitId,
         'full_name': visitorInfo?['full_name'],
         'national_id': visitorInfo?['national_id'],
         'phone': visitorInfo?['phone'],
         'host_name': employeeInfo?['full_name'],
-        'purpose': visit['purpose'],
-        'status': visit['status'],
-        'invalid_reason': visit['invalid_reason'],
-        'check_in_time': entry.value['check_in_time'],
-        'check_out_time': entry.value['check_out_time'],
-        'invalid_time': entry.value['invalid_time'],
-      });
+        'purpose': visit?['purpose'],
+        'invalid_reason': visit?['invalid_reason'],
+        'check_in_time': null,
+        'check_out_time': null,
+        'invalid_time': null,
+      };
+    }
+
+    final records = <Map<String, dynamic>>[];
+
+    Map<String, Map<String, dynamic>>? openCheckInByVisit = {};
+
+    for (final log in logs) {
+      final visitId = log['visit_id'] as String;
+      final action = log['action']?.toString();
+      final scannedAt = log['scanned_at'];
+
+      if (!visitById.containsKey(visitId)) {
+        continue;
+      }
+
+      if (action == 'invalid') {
+        final invalidRecord = baseRecordForVisit(visitId);
+
+        invalidRecord['status'] = 'invalid';
+        invalidRecord['record_type'] = 'invalid';
+        invalidRecord['invalid_time'] = scannedAt;
+
+        records.add(invalidRecord);
+        continue;
+      }
+
+      if (action == 'check_in') {
+        final checkInRecord = baseRecordForVisit(visitId);
+
+        checkInRecord['status'] = 'active';
+        checkInRecord['record_type'] = 'visit';
+        checkInRecord['check_in_time'] = scannedAt;
+
+        openCheckInByVisit[visitId] = checkInRecord;
+        records.add(checkInRecord);
+        continue;
+      }
+
+      if (action == 'check_out') {
+        final openRecord = openCheckInByVisit[visitId];
+
+        if (openRecord != null && openRecord['check_out_time'] == null) {
+          openRecord['check_out_time'] = scannedAt;
+          openRecord['status'] = 'completed';
+          openCheckInByVisit.remove(visitId);
+        } else {
+          final checkOutOnlyRecord = baseRecordForVisit(visitId);
+
+          checkOutOnlyRecord['status'] = 'completed';
+          checkOutOnlyRecord['record_type'] = 'visit';
+          checkOutOnlyRecord['check_out_time'] = scannedAt;
+
+          records.add(checkOutOnlyRecord);
+        }
+      }
     }
 
     records.sort((a, b) {
-      final aTime = (a['check_in_time'] ??
-          a['invalid_time'] ??
+      final aTime = (a['invalid_time'] ??
+          a['check_in_time'] ??
           a['check_out_time'] ??
           '')
           .toString();
 
-      final bTime = (b['check_in_time'] ??
-          b['invalid_time'] ??
+      final bTime = (b['invalid_time'] ??
+          b['check_in_time'] ??
           b['check_out_time'] ??
           '')
           .toString();
@@ -376,6 +411,7 @@ class VisitService {
 
     for (final log in logs) {
       final visitId = log['visit_id'] as String;
+
       if (!latestLogByVisit.containsKey(visitId)) {
         latestLogByVisit[visitId] = log;
       }

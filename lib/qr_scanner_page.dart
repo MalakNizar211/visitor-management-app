@@ -7,7 +7,9 @@ class QrScannerPage extends StatefulWidget {
   const QrScannerPage({super.key});
 
   @override
-  State<QrScannerPage> createState() => _QrScannerPageState();
+  State<QrScannerPage> createState() {
+    return _QrScannerPageState();
+  }
 }
 
 class _QrScannerPageState extends State<QrScannerPage> {
@@ -15,29 +17,33 @@ class _QrScannerPageState extends State<QrScannerPage> {
 
   bool hasScanned = false;
 
-  void _onDetect(BarcodeCapture capture) async {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (hasScanned) return;
 
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
     final String? scannedValue = barcodes.first.rawValue;
-    if (scannedValue == null) return;
+    if (scannedValue == null || scannedValue.trim().isEmpty) return;
 
-    setState(() => hasScanned = true);
+    setState(() {
+      hasScanned = true;
+    });
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VerificationPage(
-          scannedId: scannedValue,
-        ),
-      ),
-    );
+    await controller.stop();
 
     if (!mounted) return;
 
-    Navigator.pop(context);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) {
+          return VerificationPage(
+            scannedId: scannedValue.trim(),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -50,12 +56,14 @@ class _QrScannerPageState extends State<QrScannerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Scan Visitor QR"),
+        title: const Text('Scan Visitor QR'),
         actions: [
           IconButton(
-            tooltip: "Toggle Flashlight",
+            tooltip: 'Toggle Flashlight',
             icon: const Icon(Icons.flashlight_on_outlined),
-            onPressed: () => controller.toggleTorch(),
+            onPressed: () {
+              controller.toggleTorch();
+            },
           ),
         ],
       ),
@@ -66,11 +74,9 @@ class _QrScannerPageState extends State<QrScannerPage> {
             controller: controller,
             onDetect: _onDetect,
           ),
-
           Container(
             color: Colors.black.withOpacity(0.30),
           ),
-
           Center(
             child: Container(
               width: 260,
@@ -84,15 +90,14 @@ class _QrScannerPageState extends State<QrScannerPage> {
               ),
             ),
           ),
-
-          Positioned(
+          const Positioned(
             top: 40,
             left: 24,
             right: 24,
             child: Column(
-              children: const [
+              children: [
                 Text(
-                  "Scan Visitor QR Code",
+                  'Scan Visitor QR Code',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
@@ -102,7 +107,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
                 ),
                 SizedBox(height: 10),
                 Text(
-                  "Position the QR code inside the frame.\nScanning starts automatically.",
+                  'Position the QR code inside the frame.\nScanning starts automatically.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white70,
@@ -112,7 +117,6 @@ class _QrScannerPageState extends State<QrScannerPage> {
               ],
             ),
           ),
-
           Positioned(
             bottom: 50,
             left: 24,
@@ -138,7 +142,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
                   SizedBox(width: 14),
                   Expanded(
                     child: Text(
-                      "Scanning...",
+                      'Scanning...',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 16,
