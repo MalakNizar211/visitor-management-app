@@ -45,8 +45,7 @@ class VisitService {
     return Visit.fromMap(response);
   }
 
-  // Updates editable fields on a visit (purpose, floor, room, host_id, etc.)
-  // Pass only the fields that changed, e.g. {'purpose': 'Meeting', 'floor': '3'}
+  // Updates editable fields on a visit
   Future<Visit?> updateVisit(String id, Map<String, dynamic> updates) async {
     final response = await supabase
         .from('visits')
@@ -59,8 +58,7 @@ class VisitService {
     return Visit.fromMap(response);
   }
 
-  // Updates a single schedule row (date, start_time, end_time) by its own id.
-  // Use this when HR edits an existing scheduled date from the edit modal.
+  // Updates a single schedule row
   Future<VisitSchedule?> updateSchedule(
       String scheduleId,
       Map<String, dynamic> updates,
@@ -76,7 +74,7 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
-  // Creates an additional schedule row while HR edits a visit.
+  // Creates an additional schedule row while HR edits a visit
   Future<VisitSchedule> createSchedule(
       String visitId,
       Map<String, dynamic> scheduleData,
@@ -93,7 +91,7 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
-  // Removes a schedule row when HR deletes it from the edit screen.
+  // Removes a schedule row when HR deletes it from the edit screen
   Future<void> deleteSchedule(String scheduleId) async {
     await supabase
         .from('visit_schedules')
@@ -129,7 +127,7 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
-  // Looks at TODAY's most recent log entry only.
+  // Looks at today's most recent log entry only
   Future<String?> getTodaysLatestLogAction(String visitId) async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).toUtc();
@@ -149,8 +147,8 @@ class VisitService {
     return response['action'];
   }
 
-  // Single source of truth for "what should scanning this QR do right now".
-  // Returns one of: 'check_in', 'check_out', 'completed'.
+  // Single source of truth for what scanning this QR should do right now.
+  // Returns one of: check_in, check_out, completed.
   Future<String> getTodaysStatus(String visitId) async {
     final lastAction = await getTodaysLatestLogAction(visitId);
 
@@ -159,8 +157,56 @@ class VisitService {
     return 'completed';
   }
 
-  // For the security "records" search page.
-  // Now includes check-in, check-out, and invalid scan records.
+  // Gets check-in/check-out summary for any specific date.
+  // Used when a visitor is not scheduled today, but was scheduled another day.
+  Future<Map<String, dynamic>> getVisitLogSummaryForDate(
+      String visitId,
+      DateTime date,
+      ) async {
+    final startOfDay = DateTime(date.year, date.month, date.day).toUtc();
+    final startOfNextDay = startOfDay.add(const Duration(days: 1));
+
+    final response = await supabase
+        .from('visit_logs')
+        .select()
+        .eq('visit_id', visitId)
+        .gte('scanned_at', startOfDay.toIso8601String())
+        .lt('scanned_at', startOfNextDay.toIso8601String())
+        .order('scanned_at', ascending: true);
+
+    final logs = (response as List).cast<Map<String, dynamic>>();
+
+    String? checkInTime;
+    String? checkOutTime;
+
+    for (final log in logs) {
+      final action = log['action']?.toString();
+
+      if (action == 'check_in' && checkInTime == null) {
+        checkInTime = log['scanned_at']?.toString();
+      }
+
+      if (action == 'check_out') {
+        checkOutTime = log['scanned_at']?.toString();
+      }
+    }
+
+    String status = 'not_checked_in';
+
+    if (checkInTime != null && checkOutTime != null) {
+      status = 'completed';
+    } else if (checkInTime != null && checkOutTime == null) {
+      status = 'checked_in_only';
+    }
+
+    return {
+      'status': status,
+      'check_in_time': checkInTime,
+      'check_out_time': checkOutTime,
+    };
+  }
+
+  // For the security history page
   Future<List<Map<String, dynamic>>> getVisitRecordsForDate(DateTime date) async {
     final startOfDay = DateTime(date.year, date.month, date.day).toUtc();
     final startOfNextDay = startOfDay.add(const Duration(days: 1));
@@ -173,11 +219,12 @@ class VisitService {
         .order('scanned_at', ascending: true);
 
     final logs = (logsResponse as List).cast<Map<String, dynamic>>();
-    if (logs.isEmpty) return [];
 
     final visitIds = logs.map((l) => l['visit_id'] as String).toSet().toList();
 
-    final visitsResponse = await supabase
+    final dynamic visitsResponse = visitIds.isEmpty
+        ? <Map<String, dynamic>>[]
+        : await supabase
         .from('visits')
         .select('*, visitors(*), employees(*)')
         .inFilter('id', visitIds);
@@ -188,16 +235,20 @@ class VisitService {
     };
 
     final Map<String, Map<String, dynamic>> recordsByVisit = {};
+
     for (final log in logs) {
       final visitId = log['visit_id'] as String;
       final action = log['action']?.toString();
 
-      final record = recordsByVisit.putIfAbsent(visitId, () => {
-        'visit_id': visitId,
-        'check_in_time': null,
-        'check_out_time': null,
-        'invalid_time': null,
-      });
+      final record = recordsByVisit.putIfAbsent(
+        visitId,
+            () => {
+          'visit_id': visitId,
+          'check_in_time': null,
+          'check_out_time': null,
+          'invalid_time': null,
+        },
+      );
 
       if (action == 'check_in' && record['check_in_time'] == null) {
         record['check_in_time'] = log['scanned_at'];
@@ -209,6 +260,7 @@ class VisitService {
     }
 
     final records = <Map<String, dynamic>>[];
+
     for (final entry in recordsByVisit.entries) {
       final visit = visitById[entry.key];
       if (visit == null) continue;
@@ -237,6 +289,7 @@ class VisitService {
           a['check_out_time'] ??
           '')
           .toString();
+
       final bTime = (b['check_in_time'] ??
           b['invalid_time'] ??
           b['check_out_time'] ??
@@ -285,7 +338,7 @@ class VisitService {
     return Visit.fromMap(response);
   }
 
-  // For the HR dashboard: visits created by this HR user, with visitor + employee info joined in
+  // For the HR dashboard: visits created by this HR user
   Future<List<Map<String, dynamic>>> getMyVisitsWithVisitors() async {
     final userId = supabase.auth.currentUser!.id;
 
@@ -320,6 +373,7 @@ class VisitService {
     final logs = (logsResponse as List).cast<Map<String, dynamic>>();
 
     final Map<String, Map<String, dynamic>> latestLogByVisit = {};
+
     for (final log in logs) {
       final visitId = log['visit_id'] as String;
       if (!latestLogByVisit.containsKey(visitId)) {
@@ -328,6 +382,7 @@ class VisitService {
     }
 
     final currentlyIn = <Map<String, dynamic>>[];
+
     for (final visit in visits) {
       final visitId = visit['id'] as String;
       final latestLog = latestLogByVisit[visitId];

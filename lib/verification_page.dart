@@ -28,14 +28,18 @@ class _VerificationData {
   final Visitor? visitor;
   final Employee? host;
   final VisitSchedule? todaysSchedule;
+  final VisitSchedule? nearestSchedule;
   final String? latestLogAction;
+  final Map<String, dynamic>? nearestScheduleLogSummary;
 
   _VerificationData({
     this.visit,
     this.visitor,
     this.host,
     this.todaysSchedule,
+    this.nearestSchedule,
     this.latestLogAction,
+    this.nearestScheduleLogSummary,
   });
 }
 
@@ -51,7 +55,6 @@ class _VerificationPageState extends State<VerificationPage> {
   @override
   void initState() {
     super.initState();
-
     dataFuture = _loadData();
   }
 
@@ -66,17 +69,32 @@ class _VerificationPageState extends State<VerificationPage> {
         ? await visitorService.getVisitorById(visit.visitorId!)
         : null;
 
-    final host =
-    visit.hostId != null ? await employeeService.getEmployeeById(visit.hostId!) : null;
+    final host = visit.hostId != null
+        ? await employeeService.getEmployeeById(visit.hostId!)
+        : null;
 
     VisitSchedule? todaysSchedule;
+    VisitSchedule? nearestSchedule;
     String? latestLogAction;
+    Map<String, dynamic>? nearestScheduleLogSummary;
 
     if (visit.status == 'active') {
       todaysSchedule = await visitService.getTodaysSchedule(visit.id!);
 
       if (todaysSchedule != null) {
         latestLogAction = await visitService.getTodaysStatus(visit.id!);
+        nearestSchedule = todaysSchedule;
+      } else {
+        final allSchedules = await visitService.getSchedulesForVisit(visit.id!);
+        nearestSchedule = _nearestScheduleToToday(allSchedules);
+
+        if (nearestSchedule != null) {
+          nearestScheduleLogSummary =
+          await visitService.getVisitLogSummaryForDate(
+            visit.id!,
+            nearestSchedule.scheduledStart,
+          );
+        }
       }
     }
 
@@ -85,8 +103,38 @@ class _VerificationPageState extends State<VerificationPage> {
       visitor: visitor,
       host: host,
       todaysSchedule: todaysSchedule,
+      nearestSchedule: nearestSchedule,
       latestLogAction: latestLogAction,
+      nearestScheduleLogSummary: nearestScheduleLogSummary,
     );
+  }
+
+  VisitSchedule? _nearestScheduleToToday(List<VisitSchedule> schedules) {
+    if (schedules.isEmpty) return null;
+
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    schedules.sort((a, b) {
+      final aDate = DateTime(
+        a.scheduledStart.year,
+        a.scheduledStart.month,
+        a.scheduledStart.day,
+      );
+
+      final bDate = DateTime(
+        b.scheduledStart.year,
+        b.scheduledStart.month,
+        b.scheduledStart.day,
+      );
+
+      final aDiff = aDate.difference(todayDate).inDays.abs();
+      final bDiff = bDate.difference(todayDate).inDays.abs();
+
+      return aDiff.compareTo(bDiff);
+    });
+
+    return schedules.first;
   }
 
   Future<void> _handleYes(
@@ -261,6 +309,22 @@ class _VerificationPageState extends State<VerificationPage> {
     return '$hour12:$minute $period';
   }
 
+  String _formatIsoTime(dynamic isoValue) {
+    if (isoValue == null) return '';
+
+    final text = isoValue.toString().trim();
+    if (text.isEmpty) return '';
+
+    final dateTime = DateTime.parse(text).toLocal();
+    return _formatTime(dateTime);
+  }
+
+  String _formatDate(DateTime dateTime) {
+    return '${dateTime.year}-'
+        '${dateTime.month.toString().padLeft(2, '0')}-'
+        '${dateTime.day.toString().padLeft(2, '0')}';
+  }
+
   String _scheduleStatusMessage(VisitSchedule schedule) {
     final now = DateTime.now();
     final start = schedule.scheduledStart;
@@ -274,7 +338,7 @@ class _VerificationPageState extends State<VerificationPage> {
           ? 'Starts in ${diff.inMinutes} minutes'
           : 'Starts in ${diff.inHours} hours';
 
-      return '$range · $untilStart';
+      return '$range\n$untilStart';
     }
 
     if (now.isAfter(end)) {
@@ -284,10 +348,69 @@ class _VerificationPageState extends State<VerificationPage> {
           ? 'Scheduled window ended ${diff.inMinutes} minutes ago'
           : 'Scheduled window ended ${diff.inHours} hours ago';
 
-      return '$range · $sinceEnd';
+      return '$range\n$sinceEnd';
     }
 
-    return '$range · Within scheduled window';
+    return '$range\nWithin scheduled window';
+  }
+
+  String _scheduledDayLogMessage(Map<String, dynamic>? logSummary) {
+    final status = logSummary?['status']?.toString();
+    final checkInTime = _formatIsoTime(logSummary?['check_in_time']);
+    final checkOutTime = _formatIsoTime(logSummary?['check_out_time']);
+
+    if (status == 'completed') {
+      return 'Visit completed.\nChecked in at $checkInTime.\nChecked out at $checkOutTime.';
+    }
+
+    if (status == 'checked_in_only') {
+      return 'Visitor checked in at $checkInTime.\nNo check-out record yet.';
+    }
+
+    return 'No check-in record was found for that scheduled day.';
+  }
+
+  String _notScheduledTodayMessage(
+      VisitSchedule? nearestSchedule,
+      Map<String, dynamic>? logSummary,
+      ) {
+    if (nearestSchedule == null) {
+      return 'No scheduled visit window is linked to this QR code.';
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final scheduleStart = nearestSchedule.scheduledStart;
+    final scheduledDate = DateTime(
+      scheduleStart.year,
+      scheduleStart.month,
+      scheduleStart.day,
+    );
+
+    final differenceInDays = scheduledDate.difference(today).inDays;
+    final range =
+        '${_formatTime(nearestSchedule.scheduledStart)} – ${_formatTime(nearestSchedule.scheduledEnd)}';
+    final dateText = _formatDate(scheduledDate);
+    final logText = _scheduledDayLogMessage(logSummary);
+
+    if (differenceInDays == -1) {
+      return 'Not scheduled today.\n\nScheduled yesterday, $dateText.\nTime: $range\n\n$logText';
+    }
+
+    if (differenceInDays < -1) {
+      return 'Not scheduled today.\n\nScheduled ${differenceInDays.abs()} days ago, on $dateText.\nTime: $range\n\n$logText';
+    }
+
+    if (differenceInDays == 1) {
+      return 'Not scheduled today.\n\nScheduled tomorrow, $dateText.\nTime: $range\n\n$logText';
+    }
+
+    if (differenceInDays > 1) {
+      return 'Not scheduled today.\n\nScheduled in $differenceInDays days, on $dateText.\nTime: $range\n\n$logText';
+    }
+
+    return 'Not scheduled today.\n\nTime: $range\n\n$logText';
   }
 
   String _value(String? value) {
@@ -536,7 +659,7 @@ class _VerificationPageState extends State<VerificationPage> {
             color: AppColors.muted,
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            height: 1.4,
+            height: 1.45,
           ),
         ),
         if (details != null) ...[
@@ -829,7 +952,8 @@ class _VerificationPageState extends State<VerificationPage> {
               icon: Icons.block_rounded,
               color: AppColors.danger,
               title: 'QR flagged invalid',
-              subtitle: visit.invalidReason == null || visit.invalidReason!.trim().isEmpty
+              subtitle: visit.invalidReason == null ||
+                  visit.invalidReason!.trim().isEmpty
                   ? 'This QR code was previously marked as invalid.'
                   : visit.invalidReason!,
               details: _visitorDetailsBlock(
@@ -845,8 +969,10 @@ class _VerificationPageState extends State<VerificationPage> {
               icon: Icons.event_busy_rounded,
               color: AppColors.warning,
               title: 'Not scheduled for today',
-              subtitle:
-              'This visitor has a valid profile, but there is no scheduled visit window for today.',
+              subtitle: _notScheduledTodayMessage(
+                data.nearestSchedule,
+                data.nearestScheduleLogSummary,
+              ),
               details: _visitorDetailsBlock(
                 visitor,
                 host,
@@ -862,7 +988,8 @@ class _VerificationPageState extends State<VerificationPage> {
               icon: Icons.verified_rounded,
               color: AppColors.ratpGreen,
               title: 'Visit already completed',
-              subtitle: 'This visitor has already checked in and checked out today.',
+              subtitle:
+              'This visitor has already checked in and checked out today.',
               details: _visitorDetailsBlock(
                 visitor,
                 host,
