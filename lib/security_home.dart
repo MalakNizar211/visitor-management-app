@@ -22,6 +22,7 @@ class _SecurityHomeState extends State<SecurityHome> {
   late Future<List<Map<String, dynamic>>> visitsFuture;
 
   bool _processingBluetoothScan = false;
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -502,70 +503,67 @@ class _SecurityHomeState extends State<SecurityHome> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Security Dashboard'),
-        actions: [
-          IconButton(
-            tooltip: 'Visit Records',
-            icon: const Icon(Icons.history_rounded),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const VisitRecordsPage(),
-                ),
-              );
+  Widget _securityHomeBody() {
+    return Stack(
+      children: [
+        BluetoothScannerReceiver(
+          onScan: _handleBluetoothScan,
+        ),
+        RefreshIndicator(
+          color: AppColors.ratpGreen,
+          onRefresh: () async {
+            _refresh();
+          },
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: visitsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.ratpGreen,
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return _errorState(snapshot.error!);
+              }
+
+              final visits = snapshot.data ?? [];
+
+              if (visits.isEmpty) {
+                return _emptyState();
+              }
+
+              return _visitorsList(visits);
             },
           ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isHomeTab = _selectedIndex == 0;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: isHomeTab
+          ? AppBar(
+        title: const Text('Security Dashboard'),
+        actions: [
           IconButton(
             tooltip: 'Log out',
             icon: const Icon(Icons.logout_rounded),
             onPressed: _logout,
           ),
         ],
-      ),
-      body: Stack(
-        children: [
-          BluetoothScannerReceiver(
-            onScan: _handleBluetoothScan,
-          ),
-          RefreshIndicator(
-            color: AppColors.ratpGreen,
-            onRefresh: () async {
-              _refresh();
-            },
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: visitsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.ratpGreen,
-                    ),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return _errorState(snapshot.error!);
-                }
-
-                final visits = snapshot.data ?? [];
-
-                if (visits.isEmpty) {
-                  return _emptyState();
-                }
-
-                return _visitorsList(visits);
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+      )
+          : null,
+      body: isHomeTab ? _securityHomeBody() : const VisitRecordsPage(),
+      floatingActionButton: isHomeTab
+          ? FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.push(
             context,
@@ -578,6 +576,31 @@ class _SecurityHomeState extends State<SecurityHome> {
         },
         icon: const Icon(Icons.qr_code_scanner_rounded),
         label: const Text('Scan QR'),
+      )
+          : null,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+
+          if (index == 0) {
+            _refresh();
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history_rounded),
+            label: 'History',
+          ),
+        ],
       ),
     );
   }

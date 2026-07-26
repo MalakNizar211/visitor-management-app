@@ -62,7 +62,9 @@ class VisitService {
   // Updates a single schedule row (date, start_time, end_time) by its own id.
   // Use this when HR edits an existing scheduled date from the edit modal.
   Future<VisitSchedule?> updateSchedule(
-      String scheduleId, Map<String, dynamic> updates) async {
+      String scheduleId,
+      Map<String, dynamic> updates,
+      ) async {
     final response = await supabase
         .from('visit_schedules')
         .update(updates)
@@ -127,10 +129,7 @@ class VisitService {
     return VisitSchedule.fromMap(response);
   }
 
-  // Looks at TODAY's most recent log entry only. This matters because the
-  // same QR/visit can be reused on a later scheduled day - if we looked at
-  // the all-time last log, a visit that ended (checked out) on day 1 would
-  // look identical to one that hasn't started yet on day 2.
+  // Looks at TODAY's most recent log entry only.
   Future<String?> getTodaysLatestLogAction(String visitId) async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).toUtc();
@@ -152,8 +151,6 @@ class VisitService {
 
   // Single source of truth for "what should scanning this QR do right now".
   // Returns one of: 'check_in', 'check_out', 'completed'.
-  // 'completed' means both check-in AND check-out already happened today -
-  // no further action allowed until the next scheduled day.
   Future<String> getTodaysStatus(String visitId) async {
     final lastAction = await getTodaysLatestLogAction(visitId);
 
@@ -162,9 +159,8 @@ class VisitService {
     return 'completed';
   }
 
-  // For the security "records" search page: everyone with any check-in or
-  // check-out activity on a given calendar day (local day, converted to UTC
-  // for the query), with check-in AND check-out time shown side by side.
+  // For the security "records" search page.
+  // Now includes check-in, check-out, and invalid scan records.
   Future<List<Map<String, dynamic>>> getVisitRecordsForDate(DateTime date) async {
     final startOfDay = DateTime(date.year, date.month, date.day).toUtc();
     final startOfNextDay = startOfDay.add(const Duration(days: 1));
@@ -191,22 +187,24 @@ class VisitService {
       for (final v in visits) v['id'] as String: v,
     };
 
-    // Group logs by visit_id, picking out check-in and check-out times.
-    // If a visit somehow has more than one check-in/check-out on the same
-    // day, this keeps the first check-in and the last check-out.
     final Map<String, Map<String, dynamic>> recordsByVisit = {};
     for (final log in logs) {
       final visitId = log['visit_id'] as String;
+      final action = log['action']?.toString();
+
       final record = recordsByVisit.putIfAbsent(visitId, () => {
         'visit_id': visitId,
         'check_in_time': null,
         'check_out_time': null,
+        'invalid_time': null,
       });
 
-      if (log['action'] == 'check_in' && record['check_in_time'] == null) {
+      if (action == 'check_in' && record['check_in_time'] == null) {
         record['check_in_time'] = log['scanned_at'];
-      } else if (log['action'] == 'check_out') {
+      } else if (action == 'check_out') {
         record['check_out_time'] = log['scanned_at'];
+      } else if (action == 'invalid') {
+        record['invalid_time'] = log['scanned_at'];
       }
     }
 
@@ -225,14 +223,26 @@ class VisitService {
         'phone': visitorInfo?['phone'],
         'host_name': employeeInfo?['full_name'],
         'purpose': visit['purpose'],
+        'status': visit['status'],
+        'invalid_reason': visit['invalid_reason'],
         'check_in_time': entry.value['check_in_time'],
         'check_out_time': entry.value['check_out_time'],
+        'invalid_time': entry.value['invalid_time'],
       });
     }
 
     records.sort((a, b) {
-      final aTime = a['check_in_time'] as String? ?? '';
-      final bTime = b['check_in_time'] as String? ?? '';
+      final aTime = (a['check_in_time'] ??
+          a['invalid_time'] ??
+          a['check_out_time'] ??
+          '')
+          .toString();
+      final bTime = (b['check_in_time'] ??
+          b['invalid_time'] ??
+          b['check_out_time'] ??
+          '')
+          .toString();
+
       return aTime.compareTo(bTime);
     });
 
@@ -266,6 +276,12 @@ class VisitService {
         .maybeSingle();
 
     if (response == null) return null;
+
+    await supabase.from('visit_logs').insert({
+      'visit_id': id,
+      'action': 'invalid',
+    });
+
     return Visit.fromMap(response);
   }
 
@@ -319,6 +335,7 @@ class VisitService {
       if (latestLog != null && latestLog['action'] == 'check_in') {
         final visitorInfo = visit['visitors'] as Map<String, dynamic>?;
         final employeeInfo = visit['employees'] as Map<String, dynamic>?;
+
         currentlyIn.add({
           'visit_id': visit['id'],
           'visitor_id': visitorInfo?['id'],

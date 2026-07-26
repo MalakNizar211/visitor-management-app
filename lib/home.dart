@@ -20,18 +20,45 @@ class _HomeState extends State<Home> {
   final VisitService visitService = VisitService();
 
   late Future<List<Map<String, dynamic>>> visitsFuture;
+  String? _employeeName;
 
   @override
   void initState() {
     super.initState();
 
     visitsFuture = visitService.getMyVisitsWithVisitors();
+    _loadEmployeeName();
   }
 
   void _refreshVisits() {
     setState(() {
       visitsFuture = visitService.getMyVisitsWithVisitors();
     });
+  }
+
+  // Fetches the logged-in HR user's own name from the employees table.
+  // Queried directly here (not via VisitService) since it's dashboard-only
+  // display data, not shared visit logic.
+  Future<void> _loadEmployeeName() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    if (userId == null) return;
+
+    try {
+      final response = await Supabase.instance.client
+          .from('employees')
+          .select('full_name')
+          .eq('auth_user_id', userId)
+          .maybeSingle();
+
+      if (mounted && response != null) {
+        setState(() {
+          _employeeName = response['full_name'] as String?;
+        });
+      }
+    } catch (_) {
+      // Silently fall back to a generic greeting if this fails.
+    }
   }
 
   Future<void> _logout() async {
@@ -274,23 +301,6 @@ class _HomeState extends State<Home> {
                         );
                       },
                     ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        Navigator.pop(context);
-
-                        await _openEditPage(visit);
-                      },
-                      icon: const Icon(
-                        Icons.edit_note_rounded,
-                      ),
-                      label: const Text(
-                        'Edit visitor and visit',
-                      ),
-                    ),
-                  ),
                 ],
               ),
             );
@@ -488,105 +498,118 @@ class _HomeState extends State<Home> {
           ),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(
-          16,
-          10,
-          8,
-          10,
-        ),
-        leading: CircleAvatar(
-          radius: 24,
-          backgroundColor: AppColors.softGreen,
-          child: Text(
-            initialsFromName(visitorName),
-            style: const TextStyle(
-              color: AppColors.ratpGreenDark,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        title: Text(
-          visitorName,
-          style: const TextStyle(
-            color: AppColors.ink,
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -.1,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Icon(
-                isInvalid
-                    ? Icons.block_rounded
-                    : Icons.verified_outlined,
-                size: 16,
-                color:
-                isInvalid ? AppColors.danger : AppColors.success,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                isInvalid ? 'Invalid visit' : 'Active visit',
-                style: TextStyle(
-                  color:
-                  isInvalid ? AppColors.danger : AppColors.muted,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
         onTap: () {
           _showVisitDetails(visit);
         },
-        trailing: Wrap(
-          spacing: 0,
-          children: [
-            IconButton(
-              icon: const Icon(
-                Icons.edit_note_rounded,
-                color: AppColors.warning,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            16,
+            10,
+            8,
+            10,
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.softGreen,
+                child: Text(
+                  initialsFromName(visitorName),
+                  style: const TextStyle(
+                    color: AppColors.ratpGreenDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-              tooltip: 'Edit all details',
-              onPressed: () {
-                _openEditPage(visit);
-              },
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.qr_code_2_rounded,
-                color: AppColors.ratpGreenDark,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      visitorName,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.1,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isInvalid
+                                ? Icons.block_rounded
+                                : Icons.verified_outlined,
+                            size: 16,
+                            color: isInvalid
+                                ? AppColors.danger
+                                : AppColors.success,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isInvalid ? 'Invalid visit' : 'Active visit',
+                            style: TextStyle(
+                              color: isInvalid
+                                  ? AppColors.danger
+                                  : AppColors.muted,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              tooltip: 'View QR code',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) {
-                      return QrResultPage(
-                        visitId: visit['id'],
-                        visitorName: visitorName,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.edit_note_rounded,
+                      color: AppColors.warning,
+                    ),
+                    tooltip: 'Edit all details',
+                    onPressed: () {
+                      _openEditPage(visit);
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.qr_code_2_rounded,
+                      color: AppColors.ratpGreenDark,
+                    ),
+                    tooltip: 'View QR code',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) {
+                            return QrResultPage(
+                              visitId: visit['id'],
+                              visitorName: visitorName,
+                            );
+                          },
+                        ),
                       );
                     },
                   ),
-                );
-              },
-            ),
-            const Padding(
-              padding: EdgeInsets.only(
-                top: 12,
-                right: 4,
+                ],
               ),
-              child: Icon(
+              const Icon(
                 Icons.chevron_right_rounded,
                 color: AppColors.muted,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -609,9 +632,9 @@ class _HomeState extends State<Home> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 18),
             child: PageHeader(
-              title: 'HR Dashboard',
+              title: 'Hello, ${_employeeName ?? 'there'}',
               subtitle:
-              '${visits.length} visitor profile${visits.length == 1 ? '' : 's'} ready for review and management.',
+              "Manage today's visits and registered visitors.",
               icon: Icons.groups_2_rounded,
             ),
           );

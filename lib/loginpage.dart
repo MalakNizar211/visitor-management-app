@@ -36,7 +36,6 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text.trim(),
       );
 
-
       final myRecord = await EmployeeService().getMyEmployeeRecord();
 
       if (!mounted) return;
@@ -164,28 +163,22 @@ class _LoginPageState extends State<LoginPage> {
                         Center(
                           child: _brandMark(),
                         ),
-                        const SizedBox(height: 22),
+
+                        const SizedBox(height: 20),
+
                         const Text(
-                          'Visitor Access',
+                          'Visitor Management System',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.navy,
-                            fontSize: 30,
+                            fontSize: 25,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -.5,
+                            letterSpacing: -.3,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Sign in to manage entries, schedules, and security verification.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 15,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 34),
+
+                        const SizedBox(height: 32),
+
                         TextField(
                           controller: emailController,
                           keyboardType:
@@ -198,7 +191,9 @@ class _LoginPageState extends State<LoginPage> {
                             hintText: 'Enter your email',
                           ),
                         ),
+
                         const SizedBox(height: 18),
+
                         TextField(
                           controller: passwordController,
                           obscureText: true,
@@ -215,7 +210,9 @@ class _LoginPageState extends State<LoginPage> {
                             }
                           },
                         ),
+
                         const SizedBox(height: 28),
+
                         SizedBox(
                           height: 56,
                           child: ElevatedButton.icon(
@@ -239,37 +236,6 @@ class _LoginPageState extends State<LoginPage> {
                                   ? 'Signing in...'
                                   : 'Login',
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius:
-                            BorderRadius.circular(18),
-                            border: Border.all(
-                              color: AppColors.line,
-                            ),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                Icons.verified_user_outlined,
-                                color: AppColors.ratpGreenDark,
-                                size: 20,
-                              ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Secure internal access system',
-                                  style: TextStyle(
-                                    color: AppColors.muted,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                       ],

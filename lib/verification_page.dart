@@ -66,9 +66,8 @@ class _VerificationPageState extends State<VerificationPage> {
         ? await visitorService.getVisitorById(visit.visitorId!)
         : null;
 
-    final host = visit.hostId != null
-        ? await employeeService.getEmployeeById(visit.hostId!)
-        : null;
+    final host =
+    visit.hostId != null ? await employeeService.getEmployeeById(visit.hostId!) : null;
 
     VisitSchedule? todaysSchedule;
     String? latestLogAction;
@@ -492,8 +491,7 @@ class _VerificationPageState extends State<VerificationPage> {
           ),
           _detailRow(
             label: 'Location',
-            value:
-            'Floor ${_value(visit.floor)}, Room ${_value(visit.room)}',
+            value: 'Floor ${_value(visit.floor)}, Room ${_value(visit.room)}',
             icon: Icons.meeting_room_outlined,
           ),
         ],
@@ -556,8 +554,7 @@ class _VerificationPageState extends State<VerificationPage> {
     required Employee? host,
     required VisitSchedule schedule,
   }) {
-    final actionColor =
-    isEntryScan ? AppColors.success : AppColors.warning;
+    final actionColor = isEntryScan ? AppColors.success : AppColors.warning;
 
     return Column(
       children: [
@@ -569,9 +566,7 @@ class _VerificationPageState extends State<VerificationPage> {
                 visitor: visitor,
                 host: host,
                 visit: visit,
-                icon: isEntryScan
-                    ? Icons.login_rounded
-                    : Icons.logout_rounded,
+                icon: isEntryScan ? Icons.login_rounded : Icons.logout_rounded,
                 badgeColor: actionColor,
                 badgeText: isEntryScan ? 'ENTRY' : 'EXIT',
               ),
@@ -635,6 +630,59 @@ class _VerificationPageState extends State<VerificationPage> {
     required Visit visit,
     required bool isEntryScan,
   }) {
+    Widget actionButton({
+      required String label,
+      required IconData icon,
+      required VoidCallback onPressed,
+      required Color color,
+      bool outlined = false,
+    }) {
+      final buttonLabel = Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+        ),
+      );
+
+      if (outlined) {
+        return OutlinedButton.icon(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 54),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          icon: Icon(
+            icon,
+            size: 19,
+          ),
+          label: Flexible(
+            child: buttonLabel,
+          ),
+        );
+      }
+
+      return ElevatedButton.icon(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 54),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+        icon: Icon(
+          icon,
+          size: 19,
+        ),
+        label: Flexible(
+          child: buttonLabel,
+        ),
+      );
+    }
+
     return Container(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -666,62 +714,71 @@ class _VerificationPageState extends State<VerificationPage> {
           ),
         ),
       )
-          : Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                _handleYes(
-                  visit,
-                  isEntryScan,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 54),
-              ),
-              icon: Icon(
-                isEntryScan
-                    ? Icons.login_rounded
-                    : Icons.logout_rounded,
-              ),
-              label: Text(
-                isEntryScan ? 'Admit' : 'Check Out',
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _handleNo,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 54),
-              ),
-              icon: const Icon(
-                Icons.close_rounded,
-              ),
-              label: const Text('No'),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                _handleNotValid(visit);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 54),
-              ),
-              icon: const Icon(
-                Icons.block_rounded,
-              ),
-              label: const Text('Invalid'),
-            ),
-          ),
-        ],
+          : LayoutBuilder(
+        builder: (context, constraints) {
+          final isSmallScreen = constraints.maxWidth < 430;
+
+          final primaryButton = actionButton(
+            label: isEntryScan ? 'Admit' : 'Check Out',
+            icon: isEntryScan ? Icons.login_rounded : Icons.logout_rounded,
+            color: isEntryScan ? AppColors.success : AppColors.warning,
+            onPressed: () {
+              _handleYes(
+                visit,
+                isEntryScan,
+              );
+            },
+          );
+
+          final cancelButton = actionButton(
+            label: isEntryScan ? 'No' : 'Cancel',
+            icon: Icons.close_rounded,
+            color: AppColors.muted,
+            outlined: true,
+            onPressed: _handleNo,
+          );
+
+          final invalidButton = actionButton(
+            label: 'Invalid',
+            icon: Icons.block_rounded,
+            color: AppColors.danger,
+            onPressed: () {
+              _handleNotValid(visit);
+            },
+          );
+
+          final buttons = <Widget>[
+            primaryButton,
+            cancelButton,
+            if (isEntryScan) invalidButton,
+          ];
+
+          if (isSmallScreen) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < buttons.length; i++) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: buttons[i],
+                  ),
+                  if (i != buttons.length - 1) const SizedBox(height: 10),
+                ],
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              for (int i = 0; i < buttons.length; i++) ...[
+                Expanded(
+                  child: buttons[i],
+                ),
+                if (i != buttons.length - 1) const SizedBox(width: 10),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -772,8 +829,7 @@ class _VerificationPageState extends State<VerificationPage> {
               icon: Icons.block_rounded,
               color: AppColors.danger,
               title: 'QR flagged invalid',
-              subtitle: visit.invalidReason == null ||
-                  visit.invalidReason!.trim().isEmpty
+              subtitle: visit.invalidReason == null || visit.invalidReason!.trim().isEmpty
                   ? 'This QR code was previously marked as invalid.'
                   : visit.invalidReason!,
               details: _visitorDetailsBlock(
@@ -806,8 +862,7 @@ class _VerificationPageState extends State<VerificationPage> {
               icon: Icons.verified_rounded,
               color: AppColors.ratpGreen,
               title: 'Visit already completed',
-              subtitle:
-              'This visitor has already checked in and checked out today.',
+              subtitle: 'This visitor has already checked in and checked out today.',
               details: _visitorDetailsBlock(
                 visitor,
                 host,

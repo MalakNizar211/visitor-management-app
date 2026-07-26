@@ -130,6 +130,10 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
     return text;
   }
 
+  bool _isInvalidRecord(Map<String, dynamic> record) {
+    return record['invalid_time'] != null || record['status'] == 'invalid';
+  }
+
   List<Map<String, dynamic>> _applySearch(
       List<Map<String, dynamic>> records,
       ) {
@@ -142,16 +146,21 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
     return records.where(
           (record) {
         final name = (record['full_name'] ?? '').toString().toLowerCase();
-
         final nationalId =
         (record['national_id'] ?? '').toString().toLowerCase();
+        final reason =
+        (record['invalid_reason'] ?? '').toString().toLowerCase();
 
-        return name.contains(query) || nationalId.contains(query);
+        return name.contains(query) ||
+            nationalId.contains(query) ||
+            reason.contains(query);
       },
     ).toList();
   }
 
   void _showRecordDetails(Map<String, dynamic> record) {
+    final isInvalid = _isInvalidRecord(record);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -228,7 +237,9 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
                               ),
                               const SizedBox(height: 5),
                               Text(
-                                'Visit record · ${_dateLabel()}',
+                                isInvalid
+                                    ? 'Invalid visit record · ${_dateLabel()}'
+                                    : 'Visit record · ${_dateLabel()}',
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(.82),
                                   fontSize: 14,
@@ -244,15 +255,17 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
                             vertical: 7,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(.16),
+                            color: isInvalid
+                                ? AppColors.danger.withOpacity(.26)
+                                : Colors.white.withOpacity(.16),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: Colors.white.withOpacity(.2),
                             ),
                           ),
-                          child: const Text(
-                            'Record',
-                            style: TextStyle(
+                          child: Text(
+                            isInvalid ? 'Invalid' : 'Record',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
                               fontSize: 12,
@@ -289,22 +302,37 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
                     record['purpose'],
                   ),
                   const SizedBox(height: 18),
-                  const _DetailsSectionTitle(
-                    icon: Icons.schedule_rounded,
-                    text: 'Check-in / Check-out',
+                  _DetailsSectionTitle(
+                    icon: isInvalid
+                        ? Icons.block_rounded
+                        : Icons.schedule_rounded,
+                    text: isInvalid ? 'Invalid record' : 'Check-in / Check-out',
                   ),
-                  _timeRow(
-                    icon: Icons.login_rounded,
-                    label: 'Checked in',
-                    value: _formatTime(record['check_in_time']),
-                    color: AppColors.success,
-                  ),
-                  _timeRow(
-                    icon: Icons.logout_rounded,
-                    label: 'Checked out',
-                    value: _formatTime(record['check_out_time']),
-                    color: AppColors.warning,
-                  ),
+                  if (isInvalid) ...[
+                    _timeRow(
+                      icon: Icons.block_rounded,
+                      label: 'Marked invalid',
+                      value: _formatTime(record['invalid_time']),
+                      color: AppColors.danger,
+                    ),
+                    _detailRow(
+                      'Reason',
+                      record['invalid_reason'],
+                    ),
+                  ] else ...[
+                    _timeRow(
+                      icon: Icons.login_rounded,
+                      label: 'Checked in',
+                      value: _formatTime(record['check_in_time']),
+                      color: AppColors.success,
+                    ),
+                    _timeRow(
+                      icon: Icons.logout_rounded,
+                      label: 'Checked out',
+                      value: _formatTime(record['check_out_time']),
+                      color: AppColors.warning,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
@@ -434,6 +462,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
 
   Widget _recordCard(Map<String, dynamic> record) {
     final visitorName = _displayValue(record['full_name']);
+    final isInvalid = _isInvalidRecord(record);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -441,7 +470,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: AppColors.line,
+          color: isInvalid ? AppColors.danger.withOpacity(.35) : AppColors.line,
         ),
         boxShadow: [
           BoxShadow(
@@ -462,11 +491,14 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
             children: [
               CircleAvatar(
                 radius: 25,
-                backgroundColor: AppColors.softGreen,
+                backgroundColor:
+                isInvalid ? AppColors.danger.withOpacity(.12) : AppColors.softGreen,
                 child: Text(
                   initialsFromName(visitorName),
-                  style: const TextStyle(
-                    color: AppColors.ratpGreenDark,
+                  style: TextStyle(
+                    color: isInvalid
+                        ? AppColors.danger
+                        : AppColors.ratpGreenDark,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -534,18 +566,41 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
                       spacing: 10,
                       runSpacing: 8,
                       children: [
-                        _timePill(
-                          icon: Icons.login_rounded,
-                          label: _formatTime(record['check_in_time']),
-                          color: AppColors.success,
-                        ),
-                        _timePill(
-                          icon: Icons.logout_rounded,
-                          label: _formatTime(record['check_out_time']),
-                          color: AppColors.warning,
-                        ),
+                        if (isInvalid) ...[
+                          _timePill(
+                            icon: Icons.block_rounded,
+                            label: 'Invalid ${_formatTime(record['invalid_time'])}',
+                            color: AppColors.danger,
+                          ),
+                        ] else ...[
+                          _timePill(
+                            icon: Icons.login_rounded,
+                            label: _formatTime(record['check_in_time']),
+                            color: AppColors.success,
+                          ),
+                          _timePill(
+                            icon: Icons.logout_rounded,
+                            label: _formatTime(record['check_out_time']),
+                            color: AppColors.warning,
+                          ),
+                        ],
                       ],
                     ),
+                    if (isInvalid &&
+                        _displayValue(record['invalid_reason']) != '-') ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Reason: ${_displayValue(record['invalid_reason'])}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -689,7 +744,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
           PageHeader(
             title: 'Visit Records',
             subtitle:
-            'Review check-in and check-out history for ${_dateLabel().toLowerCase()}.',
+            'Review check-in, check-out, and invalid visitor records for ${_dateLabel().toLowerCase()}.',
             icon: Icons.manage_history_rounded,
           ),
           const SizedBox(height: 16),
@@ -745,7 +800,7 @@ class _VisitRecordsPageState extends State<VisitRecordsPage> {
                 const SizedBox(height: 14),
                 TextField(
                   decoration: const InputDecoration(
-                    hintText: 'Search by name or national ID',
+                    hintText: 'Search by name, national ID, or invalid reason',
                     prefixIcon: Icon(Icons.search_rounded),
                   ),
                   onChanged: (value) {
